@@ -679,7 +679,7 @@
                         <a-badge>
                           <a-icon v-if="!dbInbound.enable" slot="count" type="pause-circle" :style="{ color: themeSwitcher.isDarkTheme ? '#2c3950' : '#bcbcbc' }"></a-icon>
                           <a-button shape="round" size="small" :style="{ fontSize: '14px', padding: '0 10px' }">
-                            <a-icon type="info"></a-icon>
+                            <a-icon type="success"></a-icon>
                           </a-button>
                         </a-badge>
                       </a-popover>
@@ -710,8 +710,8 @@
       :footer="null"
    >
       <a-alert
-      message="功能升级提示"
-      type="info"
+      message="一键配置"
+      type="success"
       show-icon
 >
     <template #description>
@@ -721,7 +721,7 @@
         请联系面板管理员〔购买授权码〕之后才能继续使用。
     </template>
     
-    <template #icon><a-icon type="crown"></a-icon></template>
+    <template #icon><a-icon type="rocket"></a-icon></template>
      </a-alert>
         <div :style="{ marginTop: '20px', textAlign: 'center' }">
           <p>

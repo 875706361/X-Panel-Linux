@@ -572,7 +572,19 @@ func (t *Tgbot) answerCommand(message *telego.Message, chatId int64, isAdmin boo
 	case "oneclick":
 		onlyMessage = true
 		if isAdmin {
-			t.SendMsgToTgbot(chatId, "〔一键配置〕功能现已升级为“付费Pro版”专属功能，\n\n请联系面板管理员〔购买授权码〕之后才能继续使用，\n\n----->>> “授权码购买”机器人：@Buy_ShouQuan_Bot")
+			// [已解锁] 发送一键配置选项菜单
+			inlineKeyboard := tu.InlineKeyboard(
+				tu.InlineKeyboardRow(
+					tu.InlineKeyboardButton("🚀 Reality + Vision").WithCallbackData(t.encodeQuery("oneclick_reality")),
+				),
+				tu.InlineKeyboardRow(
+					tu.InlineKeyboardButton("⚡ XHTTP + Reality").WithCallbackData(t.encodeQuery("oneclick_xhttp_reality")),
+				),
+				tu.InlineKeyboardRow(
+					tu.InlineKeyboardButton("🛡️ XHTTP + TLS").WithCallbackData(t.encodeQuery("oneclick_tls")),
+				),
+			)
+			t.SendMsgToTgbot(chatId, "🎯 请选择您要一键配置的协议类型：", inlineKeyboard)
 		} else {
 			handleUnknownCommand()
 		}
@@ -1989,8 +2001,20 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 	 // 【新增代码】: 在这里处理新按钮的回调
 	 case "oneclick_options":
 		 t.deleteMessageTgBot(chatId, callbackQuery.Message.GetMessageID())
-		 t.sendCallbackAnswerTgBot(callbackQuery.ID, "功能升级提示......")
-		 t.SendMsgToTgbot(chatId, "〔一键配置〕功能现已升级为“付费Pro版”专属功能，\n\n请联系面板管理员〔购买授权码〕之后才能继续使用，\n\n----->>> “授权码购买”机器人：@Buy_ShouQuan_Bot")
+		 t.sendCallbackAnswerTgBot(callbackQuery.ID, "请选择配置类型...")
+		 // [已解锁] 发送一键配置选项菜单
+		 inlineKeyboard := tu.InlineKeyboard(
+		 	tu.InlineKeyboardRow(
+		 		tu.InlineKeyboardButton("🚀 Reality + Vision").WithCallbackData(t.encodeQuery("oneclick_reality")),
+		 	),
+		 	tu.InlineKeyboardRow(
+		 		tu.InlineKeyboardButton("⚡ XHTTP + Reality").WithCallbackData(t.encodeQuery("oneclick_xhttp_reality")),
+		 	),
+		 	tu.InlineKeyboardRow(
+		 		tu.InlineKeyboardButton("🛡️ XHTTP + TLS").WithCallbackData(t.encodeQuery("oneclick_tls")),
+		 	),
+		 )
+		 t.SendMsgToTgbot(chatId, "🎯 请选择您要一键配置的协议类型：", inlineKeyboard)
 
 	 case "subconverter_install":
 		 t.deleteMessageTgBot(chatId, callbackQuery.Message.GetMessageID())
