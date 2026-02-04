@@ -397,12 +397,8 @@ func (s *Server) Start() (err error) {
 		// 监听用户配置的地址
 		listenAddr = net.JoinHostPort(listen, strconv.Itoa(port))
 	} else {
-		// 方式二：未配置证书，强制监听在本地回环地址，仅供 SSH 转发使用
-		logger.Info("No certificate configured. Forcing listen address to localhost for security.")
-		logger.Info("Access is only possible via SSH tunnel (e.g., http://127.0.0.1).")
-		
-		// 无论用户在 listen 中填写什么，都强制使用回环地址
-		listen = fallbackToLocalhost(listen)
+		// 方式二：未配置证书，使用 HTTP 运行，不再强制监听本地回环
+		logger.Info("No certificate configured. Running on HTTP.")
 		listenAddr = net.JoinHostPort(listen, strconv.Itoa(port))
 	}
 
