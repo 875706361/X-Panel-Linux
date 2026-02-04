@@ -319,54 +319,21 @@ check_config() {
     local existing_cert=$(/usr/local/x-ui/x-ui setting -getCert true | grep -Eo 'cert: .+' | awk '{print $2}')
     local existing_key=$(/usr/local/x-ui/x-ui setting -getCert true | grep -Eo 'key: .+' | awk '{print $2}')
 
-    if [[ -n "$existing_cert" && -n "$existing_key" ]]; then
-        echo -e "${green}面板已安装证书采用SSL保护${plain}"
-        echo ""
-        local existing_cert=$(/usr/local/x-ui/x-ui setting -getCert true | grep -Eo 'cert: .+' | awk '{print $2}')
-        domain=$(basename "$(dirname "$existing_cert")")
-        echo -e "${green}登录访问面板URL: https://${domain}:${existing_port}${green}${existing_webBasePath}${plain}"
-    fi
     echo ""
-    if [[ -z "$existing_cert" && -z "$existing_key" ]]; then
-        echo -e "${red}警告：未找到证书和密钥，面板不安全！${plain}"
-        echo ""
-        echo -e "${green}------->>>>请按照下述方法设置〔ssh转发〕<<<<-------${plain}"
-        echo ""
-
-        # 检查 IP 并输出相应的 SSH 和浏览器访问信息
-        if [[ -z $v4 ]]; then
-            echo -e "${green}1、本地电脑客户端转发命令：${plain} ${blue}ssh  -L [::]:15208:127.0.0.1:${existing_port}${blue} root@[$v6]${plain}"
-            echo ""
-            echo -e "${green}2、请通过快捷键【Win + R】调出运行窗口，在里面输入【cmd】打开本地终端服务${plain}"
-            echo ""
-            echo -e "${green}3、请在终端中成功输入服务器的〔root密码〕，注意区分大小写，用以上命令进行转发${plain}"
-            echo ""
-            echo -e "${green}4、请在浏览器地址栏复制${plain} ${blue}[::1]:15208${existing_webBasePath}${plain} ${green}进入〔X-Panel面板〕登录界面"
-            echo ""
-            echo -e "${red}注意：若不使用〔ssh转发〕请为X-Panel面板配置安装证书再行登录管理后台${plain}"
-        elif [[ -n $v4 && -n $v6 ]]; then
-            echo -e "${green}1、本地电脑客户端转发命令：${plain} ${blue}ssh -L 15208:127.0.0.1:${existing_port}${blue} root@$v4${plain} ${yellow}或者 ${blue}ssh  -L [::]:15208:127.0.0.1:${existing_port}${blue} root@[$v6]${plain}"
-            echo ""
-            echo -e "${green}2、请通过快捷键【Win + R】调出运行窗口，在里面输入【cmd】打开本地终端服务${plain}"
-            echo ""
-            echo -e "${green}3、请在终端中成功输入服务器的〔root密码〕，注意区分大小写，用以上命令进行转发${plain}"
-            echo ""
-            echo -e "${green}4、请在浏览器地址栏复制${plain} ${blue}127.0.0.1:15208${existing_webBasePath}${plain} ${yellow}或者${plain} ${blue}[::1]:15208${existing_webBasePath}${plain} ${green}进入〔X-Panel面板〕登录界面"
-            echo ""
-            echo -e "${red}注意：若不使用〔ssh转发〕请为X-Panel面板配置安装证书再行登录管理后台${plain}"
-        else
-            echo -e "${green}1、本地电脑客户端转发命令：${plain} ${blue}ssh -L 15208:127.0.0.1:${existing_port}${blue} root@$v4${plain}"
-            echo ""
-            echo -e "${green}2、请通过快捷键【Win + R】调出运行窗口，在里面输入【cmd】打开本地终端服务${plain}"
-            echo ""
-            echo -e "${green}3、请在终端中成功输入服务器的〔root密码〕，注意区分大小写，用以上命令进行转发${plain}"
-            echo ""
-            echo -e "${green}4、请在浏览器地址栏复制${plain} ${blue}127.0.0.1:15208${existing_webBasePath}${plain} ${green}进入〔X-Panel面板〕登录界面"
-            echo ""
-            echo -e "${red}注意：若不使用〔ssh转发〕请为X-Panel面板配置安装证书再行登录管理后台${plain}"
-            echo ""
+    if [[ -n "$existing_cert" && -n "$existing_key" ]]; then
+        domain=$(basename "$(dirname "$existing_cert")")
+        echo -e "${green}面板已开启 SSL 保护${plain}"
+        echo -e "${green}登录地址: https://${domain}:${existing_port}${existing_webBasePath}${plain}"
+    else
+        echo -e "${yellow}面板当前处于 HTTP 模式（未配置证书）${plain}"
+        if [[ -n $v4 ]]; then
+            echo -e "${green}登录地址: http://$v4:${existing_port}${existing_webBasePath}${plain}"
+        fi
+        if [[ -n $v6 ]]; then
+            echo -e "${green}IPv6 登录地址: http://[$v6]:${existing_port}${existing_webBasePath}${plain}"
         fi
     fi
+    echo ""
 }
 
 set_port() {
