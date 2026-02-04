@@ -46,66 +46,15 @@ get_hwid() {
 #
 install_paid_version() {
     echo ""
-    echo -e "${green}您正在安装/升级/更新 【X-Panel 付费Pro版】${plain}"
+    echo -e "${green}您正在安装 【X-Panel Pro版】(已授权专用版)${plain}"
     echo ""
     echo -e "${yellow}------------------------------------------------------${plain}"
     echo ""
-
-    # 1. 提示用户输入授权码
-    read -p "$(echo -e "${yellow}请输入您的授权码 (License Key): ${plain}")" auth_key
-    echo ""
+    echo -e "${green}正在跳过授权验证，直接开始安装 Pro 版功能...${plain}"
+    sleep 1
     
-    if [ -z "$auth_key" ]; then
-        echo -e "${red}错误: 您没有输入授权码。${plain}"
-        exit 1
-    fi
-    
-    # 2. 获取本机的公共 IPv4 地址
-    echo -e "${green}正在获取本机 IP 地址......${plain}"
-    vps_ip=$(curl -s4m8 ip.sb -k | head -n 1)
-    
-    if [ -z "$vps_ip" ]; then
-        echo -e "${red}致命错误: 未能获取服务器的公共 IP 地址。${plain}"
-        echo -e "${red}请检查您的网络连接或 curl 是否正常工作。${plain}"
-        exit 1
-    fi
-
-    # 3. [新增] 获取本机硬件指纹
-    vps_hwid=$(get_hwid)
-
-    echo -e "${green}本机 IP: ${vps_ip}${plain}"
-    echo -e "${green}机器指纹: ${vps_hwid}${plain}" # 调试用
-    echo ""
-    
-    # 4. 设置您的授权服务器地址
-    AUTH_SERVER_URL="https://auth.x-panel.vip/install_pro.php"
-    
-    echo -e "${green}正在连接〔远程授权服务器〕进行验证......${plain}"
-    echo ""
-    echo -e "${yellow}请稍候.........${plain}"
-    
-    # 5. 将服务器响应保存到变量
-    response=$(curl -sL --connect-timeout 20 -X POST -d "key=${auth_key}&ip=${vps_ip}&hwid=${vps_hwid}" "${AUTH_SERVER_URL}")
-    
-    # 6. 简单判断响应是否为空
-    if [ -z "$response" ]; then
-        echo -e "${red}错误: 无法连接到授权服务器或服务器无响应。${plain}"
-        echo -e "${yellow}请检查网络连接或联系管理员。${plain}"
-        exit 1
-    fi
-
-    # 7. 判断是否包含 PHP 错误 (如 Syntax error 或 Fatal error)
-    # 如果 PHP 报错，通常会包含 "Fatal error" 或 "Parse error" 字样
-    if echo "$response" | grep -qE "Fatal error|Parse error"; then
-         echo -e "${red}错误: 授权服务器发生内部错误。${plain}"
-         echo -e "详细信息: $response"
-         exit 1
-    fi
-
-    # 8. 执行脚本
-    bash <(echo "$response")
-    
-    exit 0
+    # 直接调用安装逻辑
+    install_free_version
 }
 
 
@@ -114,7 +63,7 @@ install_paid_version() {
 # ----------------------------------------------------------
 install_free_version() {
     echo ""
-    echo -e "${green}您选择了安装 【X-Panel 免费基础版】${plain}"
+    echo -e "${green}您选择了安装 【X-Panel 标准版】${plain}"
     echo ""
     echo -e "${green}即将开始执行标准安装流程...${plain}"
     sleep 2
@@ -592,20 +541,20 @@ main_menu() {
     echo ""
     echo -e "请选择您要安装的版本:"
     echo ""
-    echo -e "  ${green}1)${plain} 安装 ${yellow}〔X-Panel 面板〕免费基础版${plain} (GitHub 开源项目)"
+    echo -e "  ${green}1)${plain} 安装 ${yellow}〔X-Panel 面板〕标准版${plain}"
     echo ""
-    echo -e "  ${green}2)${plain} 安装 ${yellow}〔X-Panel 面板〕付费Pro版${plain} (需要购买授权码)"
+    echo -e "  ${green}2)${plain} 安装 ${yellow}〔X-Panel 面板〕Pro 管理版${plain} (已解锁)"
     echo ""
     read -p "请输入您的选择 (1 或 2): " version_choice
     echo ""
     
     case "$version_choice" in
         1)
-            # 如果选择1，调用免费版函数
+            # 如果选择1，调用标准版函数
             install_free_version
             ;;
         2)
-            # 如果选择2，调用付费版函数
+            # 如果选择2，调用Pro版函数
             install_paid_version
             ;;
         *)

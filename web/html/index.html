@@ -1,6 +1,5 @@
 {{ template "page/head_start" .}}
 <style id="cool-theme-styles">
-
     /* 【通用】动态流光背景，作为所有主题的底色，增加炫酷感 */
     body {
         background: linear-gradient(-45deg, #EB5C20, #ABA0D9, #23a6d5, #23d5ab, #F0C9CF, #A9CD71, #00ffff);
@@ -9,13 +8,23 @@
     }
 
     @keyframes gradientBG {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
+        0% {
+            background-position: 0% 50%;
+        }
+
+        50% {
+            background-position: 100% 50%;
+        }
+
+        100% {
+            background-position: 0% 50%;
+        }
     }
 
     /* 【通用】让内容区透明，以透出动态背景 */
-    #app, .ant-layout, .ant-layout-content {
+    #app,
+    .ant-layout,
+    .ant-layout-content {
         background: transparent !important;
     }
 
@@ -23,13 +32,13 @@
        核心修正 1：顶部间距 (10px) - (保持不变)
        ================================================================== */
     .ant-layout-content {
-        padding-top: 10px !important; 
+        padding-top: 10px !important;
     }
 
     /* ==================================================================
        核心修正 2：卡片背景 (取消所有边框效果) - (保持不变)
        ================================================================== */
-    
+
     /* 1. 卡片基础样式 */
     .glass-card {
         border-radius: 16px !important;
@@ -37,13 +46,14 @@
         position: relative !important;
         border: none !important;
         background: transparent !important;
-        overflow: hidden; 
-        z-index: 1; 
+        overflow: hidden;
+        z-index: 1;
         box-shadow: none !important;
         animation: none !important;
     }
+
     .glass-card:hover {
-        transform: translateY(-5px); 
+        transform: translateY(-5px);
     }
 
     /* 2. 玻璃背景层 (::before) */
@@ -70,13 +80,14 @@
 
     /* 【主题兼容：亮色-light】 */
     .light .glass-card::before {
-        background: rgba(255, 255, 255, 0.2) !important; 
+        background: rgba(255, 255, 255, 0.2) !important;
         box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15) !important;
     }
+
     /* 【主题兼容：暗色-dark / 黑色-black】 */
     .dark .glass-card::before,
     .black .glass-card::before {
-        background: rgba(0, 0, 0, 0.1) !important; 
+        background: rgba(0, 0, 0, 0.1) !important;
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
     }
 
@@ -84,10 +95,12 @@
     .light .glass-card * {
         color: #2c3e50 !important;
     }
+
     .dark .glass-card *,
     .black .glass-card * {
         color: #ecf0f1 !important;
     }
+
     .light .glass-card .ant-statistic-content-value,
     .dark .glass-card .ant-statistic-content-value,
     .black .glass-card .ant-statistic-content-value {
@@ -108,74 +121,84 @@
         border-top: none !important;
         background: transparent !important;
     }
+
     .light .glass-card .ant-card-actions span {
         color: rgba(0, 0, 0, 0.65) !important;
         transition: color 0.3s;
     }
-    .light .glass-card .ant-card-actions > li > span:hover span,
-    .light .glass-card .ant-card-actions > li > span:hover .anticon {
+
+    .light .glass-card .ant-card-actions>li>span:hover span,
+    .light .glass-card .ant-card-actions>li>span:hover .anticon {
         color: #1890ff !important;
     }
+
     .dark .glass-card .ant-card-actions span,
     .black .glass-card .ant-card-actions span {
         color: rgba(255, 255, 255, 0.85) !important;
         transition: color 0.3s;
     }
-    .dark .glass-card .ant-card-actions > li > span:hover span,
-    .black .glass-card .ant-card-actions > li > span:hover span,
-    .dark .glass-card .ant-card-actions > li > span:hover .anticon,
-    .black .glass-card .ant-card-actions > li > span:hover .anticon {
+
+    .dark .glass-card .ant-card-actions>li>span:hover span,
+    .black .glass-card .ant-card-actions>li>span:hover span,
+    .dark .glass-card .ant-card-actions>li>span:hover .anticon,
+    .black .glass-card .ant-card-actions>li>span:hover .anticon {
         color: #40a9ff !important;
     }
 
     /* 隐藏【X-Panel面板】卡片内容区产生的横向滚动条 */
     .glass-card .ant-card-body div[style*="overflow-x: auto"] {
-        -ms-overflow-style: none;  /* IE and Edge */
-        scrollbar-width: none;  /* Firefox */
+        -ms-overflow-style: none;
+        /* IE and Edge */
+        scrollbar-width: none;
+        /* Firefox */
     }
+
     .glass-card .ant-card-body div[style*="overflow-x: auto"]::-webkit-scrollbar {
-        display: none;  /* Safari and Chrome */
+        display: none;
+        /* Safari and Chrome */
     }
 
 
     /* ==================================================================
        ★★★★★  最终对齐方案：实现底部严格对齐  ★★★★★
        ================================================================== */
-    
+
     /* 外层容器：确保内层 Ant-Row 可以被拉伸 (保持不变) */
     .main-content-row {
         display: flex;
-        flex-direction: column; 
+        flex-direction: column;
         flex-grow: 1;
     }
 
     /* 内层容器：包含两列的 Ant-Row，强制其为 flex 布局并拉伸子项 */
-    .main-content-row > .ant-row { 
+    .main-content-row>.ant-row {
         display: flex !important;
-        align-items: stretch !important; /* 核心：使所有列（Ant-Col）等高 */
+        align-items: stretch !important;
+        /* 核心：使所有列（Ant-Col）等高 */
         flex-grow: 1;
-        flex-wrap: wrap; /* 确保在移动设备上可以正常换行 */
+        flex-wrap: wrap;
+        /* 确保在移动设备上可以正常换行 */
     }
 
     /* 目标列（Ant-Col）：设置为 flex 布局，以便控制其内部卡片的排列 */
-    .main-content-row > .ant-row > .ant-col {
+    .main-content-row>.ant-row>.ant-col {
         display: flex;
-        flex-direction: column; 
+        flex-direction: column;
         /* 移除了 height: 100%，因为 align-items: stretch 已经处理了高度，这样更可靠 */
     }
 
     /* 让【右侧】列的最后一个卡片（即 Ant-Col:nth-child(2)）自动伸长，以填补剩余的垂直空间 */
-    .main-content-row > .ant-row > .ant-col:nth-child(2) > .glass-card:last-child {
-        flex-grow: 1; 
+    .main-content-row>.ant-row>.ant-col:nth-child(2)>.glass-card:last-child {
+        flex-grow: 1;
     }
 
     /* 移除两个主列中，所有卡片或组件的最后一个元素的底部边距，以实现完美对齐 */
-    .main-content-row > .ant-row > .ant-col > *:last-child {
+    .main-content-row>.ant-row>.ant-col>*:last-child {
         margin-bottom: 0 !important;
     }
 
     /* 确保被拉伸卡片的内容区域也跟着拉伸，并垂直居中（如果需要） */
-    .main-content-row > .ant-row > .ant-col:nth-child(2) > .glass-card:last-child .ant-card-body {
+    .main-content-row>.ant-row>.ant-col:nth-child(2)>.glass-card:last-child .ant-card-body {
         flex-grow: 1;
         display: flex;
         flex-direction: column;
@@ -183,25 +206,48 @@
     }
 
     /* 【通用】原始的必要样式保留 */
-    .ip-hidden { filter: blur(10px); user-select: none; }
-    .running-animation .ant-badge-status-dot { animation: runningAnimation 1.2s linear infinite; }
-    @keyframes runningAnimation { 0%,50%,100% {transform: scale(1);opacity: 1;} 10% {transform: scale(1.5);opacity: .2;} }
+    .ip-hidden {
+        filter: blur(10px);
+        user-select: none;
+    }
+
+    .running-animation .ant-badge-status-dot {
+        animation: runningAnimation 1.2s linear infinite;
+    }
+
+    @keyframes runningAnimation {
+
+        0%,
+        50%,
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        10% {
+            transform: scale(1.5);
+            opacity: .2;
+        }
+    }
 
     /* === X-Panel LOGO 炫酷效果样式 (保留) === */
     @keyframes neonGlow {
-        0%, 100% {
+
+        0%,
+        100% {
             text-shadow: 0 0 5px #00aaff, 0 0 10px #00aaff, 0 0 20px #00aaff, 0 0 40px #00aaff;
         }
+
         50% {
             text-shadow: 0 0 10px #ff0077, 0 0 20px #ff0077, 0 0 40px #ff0077, 0 0 80px #ff0077;
         }
     }
 
     .x-panel-logo-text {
-        font-size: 3rem; 
+        font-size: 3rem;
         font-weight: 900;
         margin: 0;
-        color: #fff; 
+        color: #fff;
         text-transform: capitalize;
         letter-spacing: 2px;
         animation: neonGlow 5s ease-in-out infinite alternate;
@@ -215,10 +261,10 @@
         color: inherit;
         line-height: 1.5;
     }
+
     .x-panel-desc b {
         font-weight: normal;
     }
-	
 </style>
 
 <style id="default-theme-styles">
@@ -228,22 +274,68 @@
             margin: 24px 16px;
         }
     }
+
     @media (max-width: 768px) {
         .ant-tabs-nav .ant-tabs-tab {
             margin: 0;
             padding: 12px .5rem;
         }
     }
-    
+
     /* 其他您提供的通用样式 */
-    .ant-tabs-bar { margin: 0; }
-    .ant-list-item { display: block; }
-    .alert-msg { color: rgb(194, 117, 18); font-weight: normal; font-size: 16px; padding: .5rem 1rem; text-align: center; background: rgb(255 145 0 / 15%); margin: 1.5rem 2.5rem 0rem; border-radius: .5rem; transition: all 0.5s; animation: signal 3s cubic-bezier(0.18, 0.89, 0.32, 1.28) infinite; }
-    .alert-msg:hover { cursor: default; transition-duration: .3s; animation: signal 0.9s ease infinite; }
-    @keyframes signal { 0% { box-shadow: 0 0 0 0 rgba(194, 118, 18, 0.5); } 50% { box-shadow: 0 0 0 6px rgba(0, 0, 0, 0); } 100% { box-shadow: 0 0 0 6px rgba(0, 0, 0, 0); } }
-    .alert-msg>i { color: inherit; font-size: 24px; }
-    .dark .ant-input-password-icon { color: var(--dark-color-text-primary); }
-    .ant-collapse-content-box .ant-alert { margin-block-end: 12px; }
+    .ant-tabs-bar {
+        margin: 0;
+    }
+
+    .ant-list-item {
+        display: block;
+    }
+
+    .alert-msg {
+        color: rgb(194, 117, 18);
+        font-weight: normal;
+        font-size: 16px;
+        padding: .5rem 1rem;
+        text-align: center;
+        background: rgb(255 145 0 / 15%);
+        margin: 1.5rem 2.5rem 0rem;
+        border-radius: .5rem;
+        transition: all 0.5s;
+        animation: signal 3s cubic-bezier(0.18, 0.89, 0.32, 1.28) infinite;
+    }
+
+    .alert-msg:hover {
+        cursor: default;
+        transition-duration: .3s;
+        animation: signal 0.9s ease infinite;
+    }
+
+    @keyframes signal {
+        0% {
+            box-shadow: 0 0 0 0 rgba(194, 118, 18, 0.5);
+        }
+
+        50% {
+            box-shadow: 0 0 0 6px rgba(0, 0, 0, 0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 6px rgba(0, 0, 0, 0);
+        }
+    }
+
+    .alert-msg>i {
+        color: inherit;
+        font-size: 24px;
+    }
+
+    .dark .ant-input-password-icon {
+        color: var(--dark-color-text-primary);
+    }
+
+    .ant-collapse-content-box .ant-alert {
+        margin-block-end: 12px;
+    }
 
     /* ==================================================================
        ★ 综合修正：解决之前所有问题 (颜色、下划线、滚动条)
@@ -258,7 +350,7 @@
     .glass-card .ant-card-actions {
         border-top: none !important;
     }
-    
+
     .glass-card:hover {
         transform: translateY(-5px);
         transition: transform 0.3s ease;
@@ -266,46 +358,56 @@
 
     /* 隐藏【X-Panel面板】卡片内容区产生的横向滚动条 */
     .glass-card .ant-card-body div[style*="overflow-x: auto"] {
-        -ms-overflow-style: none;  /* IE and Edge */
-        scrollbar-width: none;  /* Firefox */
-    }
-    .glass-card .ant-card-body div[style*="overflow-x: auto"]::-webkit-scrollbar {
-        display: none;  /* Safari and Chrome */
+        -ms-overflow-style: none;
+        /* IE and Edge */
+        scrollbar-width: none;
+        /* Firefox */
     }
 
-	/* 修正卡片底部操作文字的颜色 */
+    .glass-card .ant-card-body div[style*="overflow-x: auto"]::-webkit-scrollbar {
+        display: none;
+        /* Safari and Chrome */
+    }
+
+    /* 修正卡片底部操作文字的颜色 */
     .glass-card .ant-card-actions {
         border-top: none !important;
         background: transparent !important;
     }
+
     .light .glass-card .ant-card-actions span {
         color: rgba(0, 0, 0, 0.65) !important;
         transition: color 0.3s;
     }
-    .light .glass-card .ant-card-actions > li > span:hover span,
-    .light .glass-card .ant-card-actions > li > span:hover .anticon {
+
+    .light .glass-card .ant-card-actions>li>span:hover span,
+    .light .glass-card .ant-card-actions>li>span:hover .anticon {
         color: #1890ff !important;
     }
+
     .dark .glass-card .ant-card-actions span,
     .black .glass-card .ant-card-actions span {
         color: rgba(255, 255, 255, 0.85) !important;
         transition: color 0.3s;
     }
-    .dark .glass-card .ant-card-actions > li > span:hover span,
-    .black .glass-card .ant-card-actions > li > span:hover span,
-    .dark .glass-card .ant-card-actions > li > span:hover .anticon,
-    .black .glass-card .ant-card-actions > li > span:hover .anticon {
+
+    .dark .glass-card .ant-card-actions>li>span:hover span,
+    .black .glass-card .ant-card-actions>li>span:hover span,
+    .dark .glass-card .ant-card-actions>li>span:hover .anticon,
+    .black .glass-card .ant-card-actions>li>span:hover .anticon {
         color: #40a9ff !important;
     }
 
-	/* 通用字体颜色覆盖 */
+    /* 通用字体颜色覆盖 */
     .light .glass-card * {
         color: #2c3e50 !important;
     }
+
     .dark .glass-card *,
     .black .glass-card * {
         color: #ecf0f1 !important;
     }
+
     .light .glass-card .ant-statistic-content-value,
     .dark .glass-card .ant-statistic-content-value,
     .black .glass-card .ant-statistic-content-value {
@@ -315,40 +417,42 @@
     /* ==================================================================
        ★★★★★  最终对齐方案：实现底部严格对齐  ★★★★★
        ================================================================== */
-   
+
     /* 外层容器：确保内层 Ant-Row 可以被拉伸 (保持不变) */
     .main-content-row {
         display: flex;
-        flex-direction: column; 
+        flex-direction: column;
         flex-grow: 1;
     }
 
     /* 内层容器：包含两列的 Ant-Row，强制其为 flex 布局并拉伸子项 */
-    .main-content-row > .ant-row { 
+    .main-content-row>.ant-row {
         display: flex !important;
-        align-items: stretch !important; /* 核心：使所有列（Ant-Col）等高 */
+        align-items: stretch !important;
+        /* 核心：使所有列（Ant-Col）等高 */
         flex-grow: 1;
-        flex-wrap: wrap; /* 确保在移动设备上可以正常换行 */
+        flex-wrap: wrap;
+        /* 确保在移动设备上可以正常换行 */
     }
 
     /* 目标列（Ant-Col）：设置为 flex 布局，以便控制其内部卡片的排列 */
-    .main-content-row > .ant-row > .ant-col {
+    .main-content-row>.ant-row>.ant-col {
         display: flex;
-        flex-direction: column; 
+        flex-direction: column;
     }
 
     /* 让【右侧】列的最后一个卡片（即 Ant-Col:nth-child(2)）自动伸长，以填补剩余的垂直空间 */
-    .main-content-row > .ant-row > .ant-col:nth-child(2) > .glass-card:last-child {
-        flex-grow: 1; 
+    .main-content-row>.ant-row>.ant-col:nth-child(2)>.glass-card:last-child {
+        flex-grow: 1;
     }
 
     /* 移除两个主列中，所有卡片或组件的最后一个元素的底部边距，以实现完美对齐 */
-    .main-content-row > .ant-row > .ant-col > *:last-child {
+    .main-content-row>.ant-row>.ant-col>*:last-child {
         margin-bottom: 0 !important;
     }
 
     /* 确保被拉伸卡片的内容区域也跟着拉伸，并垂直居中（如果需要） */
-    .main-content-row > .ant-row > .ant-col:nth-child(2) > .glass-card:last-child .ant-card-body {
+    .main-content-row>.ant-row>.ant-col:nth-child(2)>.glass-card:last-child .ant-card-body {
         flex-grow: 1;
         display: flex;
         flex-direction: column;
@@ -356,13 +460,33 @@
     }
 
     /* 【通用】原始的必要样式保留 */
-    .ip-hidden { filter: blur(10px); user-select: none; }
-    .running-animation .ant-badge-status-dot { animation: runningAnimation 1.2s linear infinite; }
-    @keyframes runningAnimation { 0%,50%,100% {transform: scale(1);opacity: 1;} 10% {transform: scale(1.5);opacity: .2;} }
+    .ip-hidden {
+        filter: blur(10px);
+        user-select: none;
+    }
+
+    .running-animation .ant-badge-status-dot {
+        animation: runningAnimation 1.2s linear infinite;
+    }
+
+    @keyframes runningAnimation {
+
+        0%,
+        50%,
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        10% {
+            transform: scale(1.5);
+            opacity: .2;
+        }
+    }
 
     /* === X-Panel LOGO 标准样式 (无动画) === */
     .x-panel-logo-text {
-        font-size: 3rem; 
+        font-size: 3rem;
         font-weight: 900;
         margin: 0;
         text-transform: capitalize;
@@ -377,6 +501,7 @@
         color: inherit;
         line-height: 1.5;
     }
+
     .x-panel-desc b {
         font-weight: normal;
     }
@@ -386,462 +511,513 @@
 
 {{ template "page/body_start" .}}
 <a-layout id="app" v-cloak :class="themeSwitcher.currentTheme">
-	<a-sidebar></a-sidebar>
-	<a-layout id="content-layout">
-		<a-layout-content>
-			<a-spin :spinning="loadingStates.spinning" :delay="200" :tip="loadingTip">
-				<transition name="list" appear>
-					<a-alert type="error" v-if="showAlert && loadingStates.fetched" :style="{ marginBottom: '10px' }"
-						message='{{ i18n "secAlertTitle" }}'
-						color="red"
-						description='{{ i18n "secAlertSsl" }}'
-						show-icon closable>
-					</a-alert>
-				</transition>
-				<transition name="list" appear>
-					<template>
-						<a-row v-if="!loadingStates.fetched">
-							<a-card :style="{ textAlign: 'center', padding: '30px 0', marginTop: '10px', background: 'transparent', border: 'none' }">
-								<a-spin tip='{{ i18n "loading" }}'></a-spin>
-							</a-card>
-						</a-row>
-						<a-row v-else class="main-content-row">
-							<a-row :gutter="[isMobile ? 8 : 16, isMobile ? 8 : 16]" :style="{ flex: '1 1 100%' }">
+    <a-sidebar></a-sidebar>
+    <a-layout id="content-layout">
+        <a-layout-content>
+            <a-spin :spinning="loadingStates.spinning" :delay="200" :tip="loadingTip">
+                <transition name="list" appear>
+                    <a-alert type="error" v-if="showAlert && loadingStates.fetched" :style="{ marginBottom: '10px' }"
+                        message='{{ i18n "secAlertTitle" }}' color="red" description='{{ i18n "secAlertSsl" }}'
+                        show-icon closable>
+                    </a-alert>
+                </transition>
+                <transition name="list" appear>
+                    <template>
+                        <a-row v-if="!loadingStates.fetched">
+                            <a-card
+                                :style="{ textAlign: 'center', padding: '30px 0', marginTop: '10px', background: 'transparent', border: 'none' }">
+                                <a-spin tip='{{ i18n "loading" }}'></a-spin>
+                            </a-card>
+                        </a-row>
+                        <a-row v-else class="main-content-row">
+                            <a-row :gutter="[isMobile ? 8 : 16, isMobile ? 8 : 16]" :style="{ flex: '1 1 100%' }">
 
-								<a-col :sm="24" :lg="16">
-									<a-card hoverable :bordered="true" class="glass-card" :style="{ marginBottom: '16px', paddingBottom: '16px' }">
-										<div class="x-panel-logo-text">X-Panel</div>
-										<br>
-										<div class="x-panel-desc">
-											<b>{{ i18n "pages.index.betterPanel" }}</b>
-											<br><br>
-											<b>{{ i18n "pages.index.builtOnXray" }}</b>
-										</div>
-									</a-card>
+                                <a-col :sm="24" :lg="16">
+                                    <a-card hoverable :bordered="true" class="glass-card"
+                                        :style="{ marginBottom: '16px', paddingBottom: '16px' }">
+                                        <div class="x-panel-logo-text">X-Panel</div>
+                                        <br>
+                                        <div class="x-panel-desc">
+                                            <b>{{ i18n "pages.index.betterPanel" }}</b>
+                                            <br><br>
+                                            <b>{{ i18n "pages.index.builtOnXray" }}</b>
+                                        </div>
+                                    </a-card>
 
-									<a-card title='{{ i18n "pages.index.title" }}' hoverable :bordered="true" class="glass-card" :style="{ marginBottom: '16px' }">
-										<a-row :gutter="[0, isMobile ? 16 : 0]">
-											<a-col :sm="24" :md="12">
-												<a-row>
-													<a-col :span="12" :style="{ textAlign: 'center' }">
-														<a-progress type="dashboard" status="normal"
-															:stroke-color="status.cpu.color"
-															:percent="status.cpu.percent"></a-progress>
-														<div>
-															<b>{{ i18n "pages.index.cpu" }}:</b> [[ CPUFormatter.cpuCoreFormat(status.cpuCores) ]]
-															<a-tooltip>
-																<a-icon type="area-chart"></a-icon>
-																<template slot="title">
-																	<div><b>{{ i18n "pages.index.logicalProcessors" }}:</b> [[ (status.logicalPro) ]]</div>
-																	<div><b>{{ i18n "pages.index.frequency" }}:</b> [[ CPUFormatter.cpuSpeedFormat(status.cpuSpeedMhz) ]]</div>
-																</template>
-															</a-tooltip>
-														</div>
-													</a-col>
-													<a-col :span="12" :style="{ textAlign: 'center' }">
-														<a-progress type="dashboard" status="normal"
-															:stroke-color="status.mem.color"
-															:percent="status.mem.percent"></a-progress>
-														<div>
-															<b>{{ i18n "pages.index.memory"}}:</b> [[ SizeFormatter.sizeFormat(status.mem.current) ]] / [[ SizeFormatter.sizeFormat(status.mem.total) ]]
-														</div>
-													</a-col>
-												</a-row>
-											</a-col>
-											<a-col :sm="24" :md="12">
-												<a-row>
-													<a-col :span="12" :style="{ textAlign: 'center' }">
-														<a-progress type="dashboard" status="normal"
-															:stroke-color="status.swap.color"
-															:percent="status.swap.percent"></a-progress>
-														<div>
-															<b>{{ i18n "pages.index.swap" }}:</b> [[ SizeFormatter.sizeFormat(status.swap.current) ]] / [[ SizeFormatter.sizeFormat(status.swap.total) ]]
-														</div>
-													</a-col>
-													<a-col :span="12" :style="{ textAlign: 'center' }">
-														<a-progress type="dashboard" status="normal"
-															:stroke-color="status.disk.color"
-															:percent="status.disk.percent"></a-progress>
-														<div>
-															<b>{{ i18n "pages.index.storage"}}:</b> [[ SizeFormatter.sizeFormat(status.disk.current) ]] / [[ SizeFormatter.sizeFormat(status.disk.total) ]]
-														</div>
-													</a-col>
-												</a-row>
-											</a-col>
-										</a-row>
-									</a-card>
+                                    <a-card title='{{ i18n "pages.index.title" }}' hoverable :bordered="true"
+                                        class="glass-card" :style="{ marginBottom: '16px' }">
+                                        <a-row :gutter="[0, isMobile ? 16 : 0]">
+                                            <a-col :sm="24" :md="12">
+                                                <a-row>
+                                                    <a-col :span="12" :style="{ textAlign: 'center' }">
+                                                        <a-progress type="dashboard" status="normal"
+                                                            :stroke-color="status.cpu.color"
+                                                            :percent="status.cpu.percent"></a-progress>
+                                                        <div>
+                                                            <b>{{ i18n "pages.index.cpu" }}:</b> [[
+                                                            CPUFormatter.cpuCoreFormat(status.cpuCores) ]]
+                                                            <a-tooltip>
+                                                                <a-icon type="area-chart"></a-icon>
+                                                                <template slot="title">
+                                                                    <div><b>{{ i18n "pages.index.logicalProcessors"
+                                                                            }}:</b> [[ (status.logicalPro) ]]</div>
+                                                                    <div><b>{{ i18n "pages.index.frequency" }}:</b> [[
+                                                                        CPUFormatter.cpuSpeedFormat(status.cpuSpeedMhz)
+                                                                        ]]</div>
+                                                                </template>
+                                                            </a-tooltip>
+                                                        </div>
+                                                    </a-col>
+                                                    <a-col :span="12" :style="{ textAlign: 'center' }">
+                                                        <a-progress type="dashboard" status="normal"
+                                                            :stroke-color="status.mem.color"
+                                                            :percent="status.mem.percent"></a-progress>
+                                                        <div>
+                                                            <b>{{ i18n "pages.index.memory"}}:</b> [[
+                                                            SizeFormatter.sizeFormat(status.mem.current) ]] / [[
+                                                            SizeFormatter.sizeFormat(status.mem.total) ]]
+                                                        </div>
+                                                    </a-col>
+                                                </a-row>
+                                            </a-col>
+                                            <a-col :sm="24" :md="12">
+                                                <a-row>
+                                                    <a-col :span="12" :style="{ textAlign: 'center' }">
+                                                        <a-progress type="dashboard" status="normal"
+                                                            :stroke-color="status.swap.color"
+                                                            :percent="status.swap.percent"></a-progress>
+                                                        <div>
+                                                            <b>{{ i18n "pages.index.swap" }}:</b> [[
+                                                            SizeFormatter.sizeFormat(status.swap.current) ]] / [[
+                                                            SizeFormatter.sizeFormat(status.swap.total) ]]
+                                                        </div>
+                                                    </a-col>
+                                                    <a-col :span="12" :style="{ textAlign: 'center' }">
+                                                        <a-progress type="dashboard" status="normal"
+                                                            :stroke-color="status.disk.color"
+                                                            :percent="status.disk.percent"></a-progress>
+                                                        <div>
+                                                            <b>{{ i18n "pages.index.storage"}}:</b> [[
+                                                            SizeFormatter.sizeFormat(status.disk.current) ]] / [[
+                                                            SizeFormatter.sizeFormat(status.disk.total) ]]
+                                                        </div>
+                                                    </a-col>
+                                                </a-row>
+                                            </a-col>
+                                        </a-row>
+                                    </a-card>
 
-									<a-card title='{{ i18n "pages.index.xrayStatus" }}' hoverable :bordered="true" class="glass-card" :style="{ marginBottom: '16px' }">
-										<template #extra>
-											<template v-if="status.xray.state != 'error'">
-												<a-badge status="processing" class="running-animation" :text="status.xray.stateMsg" :color="status.xray.color"/>
-											</template>
-											<template v-else>
-												<a-popover :overlay-class-name="themeSwitcher.currentTheme">
-													<span slot="title">
-														<a-row type="flex" align="middle" justify="space-between">
-															<a-col><span>{{ i18n "pages.index.xrayErrorPopoverTitle" }}</span></a-col>
-															<a-col><a-icon type="bars" :style="{ cursor: 'pointer', float: 'right' }" @click="openLogs()"></a-icon></a-col>
-														</a-row>
-													</span>
-													<template slot="content">
-														<span :style="{ maxWidth: '400px' }" v-for="line in status.xray.errorMsg.split('\n')">[[ line ]]</span>
-													</template>
-													<a-badge :text="status.xray.stateMsg" :color="status.xray.color"/>
-												</a-popover>
-											</template>
-										</template>
-										<a-tag v-if="status.xray.version != 'Unknown'" color="green">v[[ status.xray.version ]]</a-tag>
-										<template #actions>
-											<a-space v-if="app.ipLimitEnable" direction="horizontal" @click="openXrayLogs()" :style="{ justifyContent: 'center' }">
-												<a-icon type="bars"></a-icon><span v-if="!isMobile">{{ i18n "pages.index.logs" }}</span>
-											</a-space>
-											<a-space direction="horizontal" @click="stopXrayService" :style="{ justifyContent: 'center' }">
-												<a-icon type="poweroff"></a-icon><span v-if="!isMobile">{{ i18n "pages.index.stopXray" }}</span>
-											</a-space>
-											<a-space direction="horizontal" @click="restartXrayService" :style="{ justifyContent: 'center' }">
-												<a-icon type="reload"></a-icon><span v-if="!isMobile">{{ i18n "pages.index.restartXray" }}</span>
-											</a-space>
-											<a-space direction="horizontal" @click="openSelectV2rayVersion" :style="{ justifyContent: 'center' }">
-												<a-icon type="tool"></a-icon><span v-if="!isMobile">{{ i18n "pages.index.xraySwitch" }}</span>
-											</a-space>
-										</template>
-									</a-card>
+                                    <a-card title='{{ i18n "pages.index.xrayStatus" }}' hoverable :bordered="true"
+                                        class="glass-card" :style="{ marginBottom: '16px' }">
+                                        <template #extra>
+                                            <template v-if="status.xray.state != 'error'">
+                                                <a-badge status="processing" class="running-animation"
+                                                    :text="status.xray.stateMsg" :color="status.xray.color" />
+                                            </template>
+                                            <template v-else>
+                                                <a-popover :overlay-class-name="themeSwitcher.currentTheme">
+                                                    <span slot="title">
+                                                        <a-row type="flex" align="middle" justify="space-between">
+                                                            <a-col><span>{{ i18n "pages.index.xrayErrorPopoverTitle"
+                                                                    }}</span></a-col>
+                                                            <a-col><a-icon type="bars"
+                                                                    :style="{ cursor: 'pointer', float: 'right' }"
+                                                                    @click="openLogs()"></a-icon></a-col>
+                                                        </a-row>
+                                                    </span>
+                                                    <template slot="content">
+                                                        <span :style="{ maxWidth: '400px' }"
+                                                            v-for="line in status.xray.errorMsg.split('\n')">[[ line
+                                                            ]]</span>
+                                                    </template>
+                                                    <a-badge :text="status.xray.stateMsg" :color="status.xray.color" />
+                                                </a-popover>
+                                            </template>
+                                        </template>
+                                        <a-tag v-if="status.xray.version != 'Unknown'" color="green">v[[
+                                            status.xray.version ]]</a-tag>
+                                        <template #actions>
+                                            <a-space v-if="app.ipLimitEnable" direction="horizontal"
+                                                @click="openXrayLogs()" :style="{ justifyContent: 'center' }">
+                                                <a-icon type="bars"></a-icon><span v-if="!isMobile">{{ i18n
+                                                    "pages.index.logs" }}</span>
+                                            </a-space>
+                                            <a-space direction="horizontal" @click="stopXrayService"
+                                                :style="{ justifyContent: 'center' }">
+                                                <a-icon type="poweroff"></a-icon><span v-if="!isMobile">{{ i18n
+                                                    "pages.index.stopXray" }}</span>
+                                            </a-space>
+                                            <a-space direction="horizontal" @click="restartXrayService"
+                                                :style="{ justifyContent: 'center' }">
+                                                <a-icon type="reload"></a-icon><span v-if="!isMobile">{{ i18n
+                                                    "pages.index.restartXray" }}</span>
+                                            </a-space>
+                                            <a-space direction="horizontal" @click="openSelectV2rayVersion"
+                                                :style="{ justifyContent: 'center' }">
+                                                <a-icon type="tool"></a-icon><span v-if="!isMobile">{{ i18n
+                                                    "pages.index.xraySwitch" }}</span>
+                                            </a-space>
+                                        </template>
+                                    </a-card>
 
-									<a-card title='{{ i18n "menu.link" }}' hoverable :bordered="true" class="glass-card" :style="{ marginBottom: '16px' }">
-										<template #actions>
-											<a-space direction="horizontal" @click="openLogs()" :style="{ justifyContent: 'center' }">
-												<a-icon type="bars"></a-icon><span v-if="!isMobile">{{ i18n "pages.index.logs" }}</span>
-											</a-space>
-											<a-space direction="horizontal" @click="openConfig" :style="{ justifyContent: 'center' }">
-												<a-icon type="control"></a-icon><span v-if="!isMobile">{{ i18n "pages.index.config" }}</span>
-											</a-space>
+                                    <a-card title='{{ i18n "menu.link" }}' hoverable :bordered="true" class="glass-card"
+                                        :style="{ marginBottom: '16px' }">
+                                        <template #actions>
+                                            <a-space direction="horizontal" @click="openLogs()"
+                                                :style="{ justifyContent: 'center' }">
+                                                <a-icon type="bars"></a-icon><span v-if="!isMobile">{{ i18n
+                                                    "pages.index.logs" }}</span>
+                                            </a-space>
+                                            <a-space direction="horizontal" @click="openConfig"
+                                                :style="{ justifyContent: 'center' }">
+                                                <a-icon type="control"></a-icon><span v-if="!isMobile">{{ i18n
+                                                    "pages.index.config" }}</span>
+                                            </a-space>
 
-											<a-space direction="horizontal" @click="performRemoteBackup" :style="{ justifyContent: 'center' }">
-                                                                                                                                                                                                           <a-icon type="cloud-upload"></a-icon><span v-if="!isMobile">{{ i18n "pages.index.datasnapshot" }}</span>
-											</a-space>
-											<a-space direction="horizontal" @click="performRemoteRestore" :style="{ justifyContent: 'center' }">
-												<a-icon type="medicine-box"></a-icon><span v-if="!isMobile">{{ i18n "pages.index.emergencyrecovery" }}</span>
-											</a-space>
+                                            <a-space direction="horizontal" @click="performRemoteBackup"
+                                                :style="{ justifyContent: 'center' }">
+                                                <a-icon type="cloud-upload"></a-icon><span v-if="!isMobile">{{ i18n
+                                                    "pages.index.datasnapshot" }}</span>
+                                            </a-space>
+                                            <a-space direction="horizontal" @click="performRemoteRestore"
+                                                :style="{ justifyContent: 'center' }">
+                                                <a-icon type="medicine-box"></a-icon><span v-if="!isMobile">{{ i18n
+                                                    "pages.index.emergencyrecovery" }}</span>
+                                            </a-space>
 
-											<a-space direction="horizontal" @click="openBackup" :style="{ justifyContent: 'center' }">
-												<a-icon type="cloud-server"></a-icon><span v-if="!isMobile">{{ i18n "pages.index.backup" }}</span>
-											</a-space>
-										</template>
-									</a-card>
+                                            <a-space direction="horizontal" @click="openBackup"
+                                                :style="{ justifyContent: 'center' }">
+                                                <a-icon type="cloud-server"></a-icon><span v-if="!isMobile">{{ i18n
+                                                    "pages.index.backup" }}</span>
+                                            </a-space>
+                                        </template>
+                                    </a-card>
 
-									<a-row type="flex" align="top" :gutter="[isMobile ? 8 : 16, 0]" :style="{ flexShrink: 0 }">
-										<a-col :sm="24" :md="12">
-											<a-card title='{{ i18n "pages.index.totalData" }}' hoverable :bordered="true" class="glass-card" :style="{ marginBottom: isMobile ? '16px' : '0' }">
-												<a-row :gutter="isMobile ? [8,8] : 0">
-													<a-col :span="12">
-														<a-custom-statistic title='{{ i18n "pages.index.sent" }}' :value="SizeFormatter.sizeFormat(status.netTraffic.sent)">
-															<template #prefix><a-icon type="cloud-upload" /></template>
-														</a-custom-statistic>
-													</a-col>
-													<a-col :span="12">
-														<a-custom-statistic title='{{ i18n "pages.index.received" }}' :value="SizeFormatter.sizeFormat(status.netTraffic.recv)">
-															<template #prefix><a-icon type="cloud-download" /></template>
-														</a-custom-statistic>
-													</a-col>
-												</a-row>
-											</a-card>
-										</a-col>
-										<a-col :sm="24" :md="12">
-											<a-card title='{{ i18n "pages.index.connectionCount" }}' hoverable :bordered="true" class="glass-card">
-												<a-row :gutter="isMobile ? [8,8] : 0">
-													<a-col :span="12">
-														<a-custom-statistic title="TCP" :value="status.tcpCount">
-															<template #prefix><a-icon type="swap" /></template>
-														</a-custom-statistic>
-													</a-col>
-													<a-col :span="12">
-														<a-custom-statistic title="UDP" :value="status.udpCount">
-															<template #prefix><a-icon type="swap" /></template>
-														</a-custom-statistic>
-													</a-col>
-												</a-row>
-											</a-card>
-										</a-col>
-									</a-row>
+                                    <a-row type="flex" align="top" :gutter="[isMobile ? 8 : 16, 0]"
+                                        :style="{ flexShrink: 0 }">
+                                        <a-col :sm="24" :md="12">
+                                            <a-card title='{{ i18n "pages.index.totalData" }}' hoverable
+                                                :bordered="true" class="glass-card"
+                                                :style="{ marginBottom: isMobile ? '16px' : '0' }">
+                                                <a-row :gutter="isMobile ? [8,8] : 0">
+                                                    <a-col :span="12">
+                                                        <a-custom-statistic title='{{ i18n "pages.index.sent" }}'
+                                                            :value="SizeFormatter.sizeFormat(status.netTraffic.sent)">
+                                                            <template #prefix><a-icon type="cloud-upload" /></template>
+                                                        </a-custom-statistic>
+                                                    </a-col>
+                                                    <a-col :span="12">
+                                                        <a-custom-statistic title='{{ i18n "pages.index.received" }}'
+                                                            :value="SizeFormatter.sizeFormat(status.netTraffic.recv)">
+                                                            <template #prefix><a-icon
+                                                                    type="cloud-download" /></template>
+                                                        </a-custom-statistic>
+                                                    </a-col>
+                                                </a-row>
+                                            </a-card>
+                                        </a-col>
+                                        <a-col :sm="24" :md="12">
+                                            <a-card title='{{ i18n "pages.index.connectionCount" }}' hoverable
+                                                :bordered="true" class="glass-card">
+                                                <a-row :gutter="isMobile ? [8,8] : 0">
+                                                    <a-col :span="12">
+                                                        <a-custom-statistic title="TCP" :value="status.tcpCount">
+                                                            <template #prefix><a-icon type="swap" /></template>
+                                                        </a-custom-statistic>
+                                                    </a-col>
+                                                    <a-col :span="12">
+                                                        <a-custom-statistic title="UDP" :value="status.udpCount">
+                                                            <template #prefix><a-icon type="swap" /></template>
+                                                        </a-custom-statistic>
+                                                    </a-col>
+                                                </a-row>
+                                            </a-card>
+                                        </a-col>
+                                    </a-row>
 
-								</a-col>
+                                </a-col>
 
-								<a-col :sm="24" :lg="8">
-									<a-card title='{{ i18n "pages.index.xpanelTitle" }}' hoverable :bordered="true" class="glass-card" :style="{ marginBottom: '16px' }">
-										<div style="white-space: nowrap; overflow-x: auto;">
-											<a rel="noopener" href="https://github.com/875706361/X-Panel-Linux/releases" target="_blank">
-												<a-tag color="green"><span>v{{ .cur_ver }}</span></a-tag>
-											</a>
-											<a rel="noopener" href="https://t.me/is_Chat_Bot" target="_blank">
-												<a-tag color="green"><span>{{ i18n "pages.index.tgPrivateChat" }}</span></a-tag>
-											</a>
-											<a rel="noopener" href="https://t.me/XUI_CN" target="_blank">
-												<a-tag color="purple"><span>{{ i18n "pages.index.tgGroupChat" }}</span></a-tag>
-											</a>
-										</div>
-									</a-card>
+                                <a-col :sm="24" :lg="8">
+                                    <a-card title='{{ i18n "pages.index.xpanelTitle" }}' hoverable :bordered="true"
+                                        class="glass-card" :style="{ marginBottom: '16px' }">
+                                        <div style="white-space: nowrap; overflow-x: auto;">
+                                            <a rel="noopener" href="https://github.com/875706361/X-Panel-Linux/releases"
+                                                target="_blank">
+                                                <a-tag color="green"><span>v{{ .cur_ver }}</span></a-tag>
+                                            </a>
+                                            <a rel="noopener" href="https://t.me/is_Chat_Bot" target="_blank">
+                                                <a-tag color="green"><span>{{ i18n "pages.index.tgPrivateChat"
+                                                        }}</span></a-tag>
+                                            </a>
+                                            <a rel="noopener" href="https://t.me/XUI_CN" target="_blank">
+                                                <a-tag color="purple"><span>{{ i18n "pages.index.tgGroupChat"
+                                                        }}</span></a-tag>
+                                            </a>
+                                        </div>
+                                    </a-card>
 
-									<a-card title='{{ i18n "pages.index.operationHours" }}' hoverable :bordered="true" class="glass-card" :style="{ marginBottom: '16px' }">
-										<a-tag :color="status.xray.color">Xray: [[ TimeFormatter.formatSecond(status.appStats.uptime) ]]</a-tag>
-										<a-tag color="green">OS: [[ TimeFormatter.formatSecond(status.uptime) ]]</a-tag>
-									</a-card>
+                                    <a-card title='{{ i18n "pages.index.operationHours" }}' hoverable :bordered="true"
+                                        class="glass-card" :style="{ marginBottom: '16px' }">
+                                        <a-tag :color="status.xray.color">Xray: [[
+                                            TimeFormatter.formatSecond(status.appStats.uptime) ]]</a-tag>
+                                        <a-tag color="green">OS: [[ TimeFormatter.formatSecond(status.uptime) ]]</a-tag>
+                                    </a-card>
 
-									<a-card title='{{ i18n "pages.index.systemLoad" }}' hoverable :bordered="true" class="glass-card" :style="{ marginBottom: '16px' }">
-										<div style="white-space: nowrap; overflow-x: auto;"> 
-											<a-tag color="green">
-												<a-tooltip>
-													[[ status.loads[0] ]] | [[ status.loads[1] ]] | [[ status.loads[2] ]]
-													<template slot="title">
-														{{ i18n "pages.index.systemLoadDesc" }}
-													</template>
-												</a-tooltip>
-											</a-tag>
-											<a rel="noopener" href="https://ping.pe" target="_blank"><a-tag color="green">{{ i18n "pages.index.portCheck" }}</a-tag></a>
-											<a rel="noopener" href="https://www.speedtest.net" target="_blank"><a-tag color="green">{{ i18n "pages.index.speedTest" }}</a-tag></a>
-										</div>
-									</a-card>
+                                    <a-card title='{{ i18n "pages.index.systemLoad" }}' hoverable :bordered="true"
+                                        class="glass-card" :style="{ marginBottom: '16px' }">
+                                        <div style="white-space: nowrap; overflow-x: auto;">
+                                            <a-tag color="green">
+                                                <a-tooltip>
+                                                    [[ status.loads[0] ]] | [[ status.loads[1] ]] | [[ status.loads[2]
+                                                    ]]
+                                                    <template slot="title">
+                                                        {{ i18n "pages.index.systemLoadDesc" }}
+                                                    </template>
+                                                </a-tooltip>
+                                            </a-tag>
+                                            <a rel="noopener" href="https://ping.pe" target="_blank"><a-tag
+                                                    color="green">{{ i18n "pages.index.portCheck" }}</a-tag></a>
+                                            <a rel="noopener" href="https://www.speedtest.net" target="_blank"><a-tag
+                                                    color="green">{{ i18n "pages.index.speedTest" }}</a-tag></a>
+                                        </div>
+                                    </a-card>
 
-									<a-card title='{{ i18n "usage"}}' hoverable :bordered="true" class="glass-card" :style="{ marginBottom: '16px' }">
-										<a-tag color="green"> {{ i18n "pages.index.memory" }}: [[ SizeFormatter.sizeFormat(status.appStats.mem) ]] </a-tag>
-										<a-tag color="green"> {{ i18n "pages.index.threads" }}: [[ status.appStats.threads ]] </a-tag>
-									</a-card>
+                                    <a-card title='{{ i18n "usage"}}' hoverable :bordered="true" class="glass-card"
+                                        :style="{ marginBottom: '16px' }">
+                                        <a-tag color="green"> {{ i18n "pages.index.memory" }}: [[
+                                            SizeFormatter.sizeFormat(status.appStats.mem) ]] </a-tag>
+                                        <a-tag color="green"> {{ i18n "pages.index.threads" }}: [[
+                                            status.appStats.threads ]] </a-tag>
+                                    </a-card>
 
-									<a-card title='{{ i18n "pages.index.overallSpeed" }}' hoverable :bordered="true" class="glass-card" :style="{ marginBottom: '16px' }">
-										<a-row :gutter="isMobile ? [8,8] : 0">
-											<a-col :span="12">
-												<a-custom-statistic title='{{ i18n "pages.index.upload" }}' :value="SizeFormatter.sizeFormat(status.netIO.up)">
-													<template #prefix><a-icon type="arrow-up" /></template>
-													<template #suffix>/s</template>
-												</a-custom-statistic>
-											</a-col>
-											<a-col :span="12">
-												<a-custom-statistic title='{{ i18n "pages.index.download" }}' :value="SizeFormatter.sizeFormat(status.netIO.down)">
-													<template #prefix><a-icon type="arrow-down" /></template>
-													<template #suffix>/s</template>
-												</a-custom-statistic>
-											</a-col>
-										</a-row>
-									</a-card>
+                                    <a-card title='{{ i18n "pages.index.overallSpeed" }}' hoverable :bordered="true"
+                                        class="glass-card" :style="{ marginBottom: '16px' }">
+                                        <a-row :gutter="isMobile ? [8,8] : 0">
+                                            <a-col :span="12">
+                                                <a-custom-statistic title='{{ i18n "pages.index.upload" }}'
+                                                    :value="SizeFormatter.sizeFormat(status.netIO.up)">
+                                                    <template #prefix><a-icon type="arrow-up" /></template>
+                                                    <template #suffix>/s</template>
+                                                </a-custom-statistic>
+                                            </a-col>
+                                            <a-col :span="12">
+                                                <a-custom-statistic title='{{ i18n "pages.index.download" }}'
+                                                    :value="SizeFormatter.sizeFormat(status.netIO.down)">
+                                                    <template #prefix><a-icon type="arrow-down" /></template>
+                                                    <template #suffix>/s</template>
+                                                </a-custom-statistic>
+                                            </a-col>
+                                        </a-row>
+                                    </a-card>
 
-									<a-card title='{{ i18n "pages.index.ipAddresses" }}' hoverable :bordered="true" class="glass-card">
-										<template #extra>
-											<a-tooltip :placement="isMobile ? 'topRight' : 'top'">
-												<template #title>{{ i18n "pages.index.toggleIpVisibility" }}</template>
-												<a-icon :type="showIp ? 'eye' : 'eye-invisible'" :style="{ fontSize: '1rem' }" @click="showIp = !showIp"></a-icon>
-											</a-tooltip>
-										</template>
-										<a-row :class="showIp ? 'ip-visible' : 'ip-hidden'" :gutter="isMobile ? [8,8] : 0">
-											<a-col :span="isMobile ? 24 : 12">
-												<a-custom-statistic title="IPv4" :value="status.publicIP.ipv4">
-													<template #prefix><a-icon type="global" /></template>
-												</a-custom-statistic>
-											</a-col>
-											<a-col :span="isMobile ? 24 : 12">
-												<a-custom-statistic title="IPv6" :value="status.publicIP.ipv6">
-													<template #prefix><a-icon type="global" /></template>
-												</a-custom-statistic>
-											</a-col>
-										</a-row>
-									</a-card>
+                                    <a-card title='{{ i18n "pages.index.ipAddresses" }}' hoverable :bordered="true"
+                                        class="glass-card">
+                                        <template #extra>
+                                            <a-tooltip :placement="isMobile ? 'topRight' : 'top'">
+                                                <template #title>{{ i18n "pages.index.toggleIpVisibility" }}</template>
+                                                <a-icon :type="showIp ? 'eye' : 'eye-invisible'"
+                                                    :style="{ fontSize: '1rem' }" @click="showIp = !showIp"></a-icon>
+                                            </a-tooltip>
+                                        </template>
+                                        <a-row :class="showIp ? 'ip-visible' : 'ip-hidden'"
+                                            :gutter="isMobile ? [8,8] : 0">
+                                            <a-col :span="isMobile ? 24 : 12">
+                                                <a-custom-statistic title="IPv4" :value="status.publicIP.ipv4">
+                                                    <template #prefix><a-icon type="global" /></template>
+                                                </a-custom-statistic>
+                                            </a-col>
+                                            <a-col :span="isMobile ? 24 : 12">
+                                                <a-custom-statistic title="IPv6" :value="status.publicIP.ipv6">
+                                                    <template #prefix><a-icon type="global" /></template>
+                                                </a-custom-statistic>
+                                            </a-col>
+                                        </a-row>
+                                    </a-card>
 
-								</a-col>
-							</a-row>
+                                </a-col>
+                            </a-row>
 
 
-						</a-row>
-						</template>
-				</transition>
-			</a-spin>
-		</a-layout-content>
-	</a-layout>
-	<a-modal id="version-modal" v-model="versionModal.visible" title='{{ i18n "pages.index.xraySwitch" }}' :closable="true"
-		@ok="() => versionModal.visible = false" :class="themeSwitcher.currentTheme" footer="">
-		<a-collapse default-active-key="1">
-			<a-collapse-panel key="1" header='Xray'>
-				<a-alert type="warning" :style="{ marginBottom: '12px', width: '100%' }" message='{{ i18n "pages.index.xraySwitchClickDesk" }}' show-icon></a-alert>
-				<a-list class="ant-version-list" bordered :style="{ width: '100%' }">
-					<a-list-item class="ant-version-list-item" v-for="version, index in versionModal.versions">
-						<a-tag :color="index % 2 == 0 ? 'purple' : 'green'">[[ version ]]</a-tag>
-						<a-radio :class="themeSwitcher.currentTheme" :checked="version === `v${status.xray.version}`" @click="switchV2rayVersion(version)"></a-radio>
-					</a-list-item>
-				</a-list>
-			</a-collapse-panel>
-			<a-collapse-panel key="2" header='Geofiles'>
-				<a-list class="ant-version-list" bordered :style="{ width: '100%' }">
-					<a-list-item class="ant-version-list-item" v-for="file, index in ['geosite.dat', 'geoip.dat', 'geosite_IR.dat', 'geoip_IR.dat', 'geosite_RU.dat', 'geoip_RU.dat']">
-						<a-tag :color="index % 2 == 0 ? 'purple' : 'green'">[[ file ]]</a-tag>
-						<a-icon type="reload" @click="updateGeofile(file)" :style="{ marginRight: '8px' }"/>
-					</a-list-item>
-				</a-list>
-				<div style="margin-top: 5px; display: flex; justify-content: flex-end;">
-					<a-button @click="updateGeofile('')">{{ i18n "pages.index.geofilesUpdateAll" }}</a-button>
-				</div>
-			</a-collapse-panel>
-		</a-collapse>
-	</a-modal>
-	<a-modal id="log-modal" v-model="logModal.visible"
-		:closable="true" @cancel="() => logModal.visible = false"
-		:class="themeSwitcher.currentTheme"
-		width="800px" footer="">
-		<template slot="title">
-			{{ i18n "pages.index.logs" }}
-			<a-icon :spin="logModal.loading"
-				type="sync"
-				:style="{ verticalAlign: 'middle', marginLeft: '10px' }"
-				:disabled="logModal.loading"
-				@click="openLogs()">
-			</a-icon>
-		</template>
-		<a-form layout="inline">
-			<a-form-item :style="{ marginRight: '0.5rem' }">
-				<a-input-group compact>
-					<a-select size="small" v-model="logModal.rows" :style="{ width: '70px' }"
-						@change="openLogs()" :dropdown-class-name="themeSwitcher.currentTheme">
-						<a-select-option value="10">10</a-select-option>
-						<a-select-option value="20">20</a-select-option>
-						<a-select-option value="50">50</a-select-option>
-						<a-select-option value="100">100</a-select-option>
-						<a-select-option value="500">500</a-select-option>
-					</a-select>
-					<a-select size="small" v-model="logModal.level" :style="{ width: '95px' }"
-						@change="openLogs()" :dropdown-class-name="themeSwitcher.currentTheme">
-						<a-select-option value="debug">Debug</a-select-option>
-						<a-select-option value="info">Info</a-select-option>
-						<a-select-option value="notice">Notice</a-select-option>
-						<a-select-option value="warning">Warning</a-select-option>
-						<a-select-option value="err">Error</a-select-option>
-					</a-select>
-				</a-input-group>
-			</a-form-item>
-			<a-form-item>
-				<a-checkbox v-model="logModal.syslog" @change="openLogs()">SysLog</a-checkbox>
-			</a-form-item>
-			<a-form-item :style="{ float: 'right' }">
-				<a-button type="primary" icon="download" @click="FileManager.downloadTextFile(logModal.logs?.join('\n'), 'x-ui.log')"></a-button>
-			</a-form-item>
-		</a-form>
-		<div class="ant-input" :style="{ height: 'auto', maxHeight: '500px', overflow: 'auto', marginTop: '0.5rem' }" v-html="logModal.formattedLogs"></div>
-	</a-modal>
-	<a-modal id="xraylog-modal"
-		v-model="xraylogModal.visible"
-		:closable="true" @cancel="() => xraylogModal.visible = false"
-		:class="themeSwitcher.currentTheme"
-		width="80vw"
-		footer="">
-		<template slot="title">
-			{{ i18n "pages.index.logs" }}
-			<a-icon :spin="xraylogModal.loading"
-				type="sync"
-				:style="{ verticalAlign: 'middle', marginLeft: '10px' }"
-				:disabled="xraylogModal.loading"
-				@click="openXrayLogs()">
-			</a-icon>
-		</template>
-		<a-form layout="inline">
-			<a-form-item :style="{ marginRight: '0.5rem' }">
-				<a-input-group compact>
-					<a-select size="small" v-model="xraylogModal.rows" :style="{ width: '70px' }"
-						@change="openXrayLogs()" :dropdown-class-name="themeSwitcher.currentTheme">
-						<a-select-option value="10">10</a-select-option>
-						<a-select-option value="20">20</a-select-option>
-						<a-select-option value="50">50</a-select-option>
-						<a-select-option value="100">100</a-select-option>
-						<a-select-option value="500">500</a-select-option>
-					</a-select>
-				</a-input-group>
-			</a-form-item>
-			<a-form-item label="Filter:">
-				<a-input size="small" v-model="xraylogModal.filter" @keyup.enter="openXrayLogs()"></a-input>
-			</a-form-item>
-			<a-form-item>
-				<a-checkbox v-model="xraylogModal.showDirect" @change="openXrayLogs()">Direct</a-checkbox>
-				<a-checkbox v-model="xraylogModal.showBlocked" @change="openXrayLogs()">Blocked</a-checkbox>
-				<a-checkbox v-model="xraylogModal.showProxy" @change="openXrayLogs()">Proxy</a-checkbox>
-			</a-form-item>
-			<a-form-item :style="{ float: 'right' }">
-				<a-button type="primary" icon="download" @click="FileManager.downloadTextFile(xraylogModal.logs?.join('\n'), 'x-ui.log')"></button>
-			</a-form-item>
-		</a-form>
-		<div class="ant-input" :style="{ height: 'auto', maxHeight: '500px', overflow: 'auto', marginTop: '0.5rem' }" v-html="xraylogModal.formattedLogs"></div>
-	</a-modal>
+                        </a-row>
+                    </template>
+                </transition>
+            </a-spin>
+        </a-layout-content>
+    </a-layout>
+    <a-modal id="version-modal" v-model="versionModal.visible" title='{{ i18n "pages.index.xraySwitch" }}'
+        :closable="true" @ok="() => versionModal.visible = false" :class="themeSwitcher.currentTheme" footer="">
+        <a-collapse default-active-key="1">
+            <a-collapse-panel key="1" header='Xray'>
+                <a-alert type="warning" :style="{ marginBottom: '12px', width: '100%' }"
+                    message='{{ i18n "pages.index.xraySwitchClickDesk" }}' show-icon></a-alert>
+                <a-list class="ant-version-list" bordered :style="{ width: '100%' }">
+                    <a-list-item class="ant-version-list-item" v-for="version, index in versionModal.versions">
+                        <a-tag :color="index % 2 == 0 ? 'purple' : 'green'">[[ version ]]</a-tag>
+                        <a-radio :class="themeSwitcher.currentTheme" :checked="version === `v${status.xray.version}`"
+                            @click="switchV2rayVersion(version)"></a-radio>
+                    </a-list-item>
+                </a-list>
+            </a-collapse-panel>
+            <a-collapse-panel key="2" header='Geofiles'>
+                <a-list class="ant-version-list" bordered :style="{ width: '100%' }">
+                    <a-list-item class="ant-version-list-item"
+                        v-for="file, index in ['geosite.dat', 'geoip.dat', 'geosite_IR.dat', 'geoip_IR.dat', 'geosite_RU.dat', 'geoip_RU.dat']">
+                        <a-tag :color="index % 2 == 0 ? 'purple' : 'green'">[[ file ]]</a-tag>
+                        <a-icon type="reload" @click="updateGeofile(file)" :style="{ marginRight: '8px' }" />
+                    </a-list-item>
+                </a-list>
+                <div style="margin-top: 5px; display: flex; justify-content: flex-end;">
+                    <a-button @click="updateGeofile('')">{{ i18n "pages.index.geofilesUpdateAll" }}</a-button>
+                </div>
+            </a-collapse-panel>
+        </a-collapse>
+    </a-modal>
+    <a-modal id="log-modal" v-model="logModal.visible" :closable="true" @cancel="() => logModal.visible = false"
+        :class="themeSwitcher.currentTheme" width="800px" footer="">
+        <template slot="title">
+            {{ i18n "pages.index.logs" }}
+            <a-icon :spin="logModal.loading" type="sync" :style="{ verticalAlign: 'middle', marginLeft: '10px' }"
+                :disabled="logModal.loading" @click="openLogs()">
+            </a-icon>
+        </template>
+        <a-form layout="inline">
+            <a-form-item :style="{ marginRight: '0.5rem' }">
+                <a-input-group compact>
+                    <a-select size="small" v-model="logModal.rows" :style="{ width: '70px' }" @change="openLogs()"
+                        :dropdown-class-name="themeSwitcher.currentTheme">
+                        <a-select-option value="10">10</a-select-option>
+                        <a-select-option value="20">20</a-select-option>
+                        <a-select-option value="50">50</a-select-option>
+                        <a-select-option value="100">100</a-select-option>
+                        <a-select-option value="500">500</a-select-option>
+                    </a-select>
+                    <a-select size="small" v-model="logModal.level" :style="{ width: '95px' }" @change="openLogs()"
+                        :dropdown-class-name="themeSwitcher.currentTheme">
+                        <a-select-option value="debug">Debug</a-select-option>
+                        <a-select-option value="info">Info</a-select-option>
+                        <a-select-option value="notice">Notice</a-select-option>
+                        <a-select-option value="warning">Warning</a-select-option>
+                        <a-select-option value="err">Error</a-select-option>
+                    </a-select>
+                </a-input-group>
+            </a-form-item>
+            <a-form-item>
+                <a-checkbox v-model="logModal.syslog" @change="openLogs()">SysLog</a-checkbox>
+            </a-form-item>
+            <a-form-item :style="{ float: 'right' }">
+                <a-button type="primary" icon="download"
+                    @click="FileManager.downloadTextFile(logModal.logs?.join('\n'), 'x-ui.log')"></a-button>
+            </a-form-item>
+        </a-form>
+        <div class="ant-input" :style="{ height: 'auto', maxHeight: '500px', overflow: 'auto', marginTop: '0.5rem' }"
+            v-html="logModal.formattedLogs"></div>
+    </a-modal>
+    <a-modal id="xraylog-modal" v-model="xraylogModal.visible" :closable="true"
+        @cancel="() => xraylogModal.visible = false" :class="themeSwitcher.currentTheme" width="80vw" footer="">
+        <template slot="title">
+            {{ i18n "pages.index.logs" }}
+            <a-icon :spin="xraylogModal.loading" type="sync" :style="{ verticalAlign: 'middle', marginLeft: '10px' }"
+                :disabled="xraylogModal.loading" @click="openXrayLogs()">
+            </a-icon>
+        </template>
+        <a-form layout="inline">
+            <a-form-item :style="{ marginRight: '0.5rem' }">
+                <a-input-group compact>
+                    <a-select size="small" v-model="xraylogModal.rows" :style="{ width: '70px' }"
+                        @change="openXrayLogs()" :dropdown-class-name="themeSwitcher.currentTheme">
+                        <a-select-option value="10">10</a-select-option>
+                        <a-select-option value="20">20</a-select-option>
+                        <a-select-option value="50">50</a-select-option>
+                        <a-select-option value="100">100</a-select-option>
+                        <a-select-option value="500">500</a-select-option>
+                    </a-select>
+                </a-input-group>
+            </a-form-item>
+            <a-form-item label="Filter:">
+                <a-input size="small" v-model="xraylogModal.filter" @keyup.enter="openXrayLogs()"></a-input>
+            </a-form-item>
+            <a-form-item>
+                <a-checkbox v-model="xraylogModal.showDirect" @change="openXrayLogs()">Direct</a-checkbox>
+                <a-checkbox v-model="xraylogModal.showBlocked" @change="openXrayLogs()">Blocked</a-checkbox>
+                <a-checkbox v-model="xraylogModal.showProxy" @change="openXrayLogs()">Proxy</a-checkbox>
+            </a-form-item>
+            <a-form-item :style="{ float: 'right' }">
+                <a-button type="primary" icon="download"
+                    @click="FileManager.downloadTextFile(xraylogModal.logs?.join('\n'), 'x-ui.log')"></button>
+            </a-form-item>
+        </a-form>
+        <div class="ant-input" :style="{ height: 'auto', maxHeight: '500px', overflow: 'auto', marginTop: '0.5rem' }"
+            v-html="xraylogModal.formattedLogs"></div>
+    </a-modal>
 
-<a-modal id="welcome-modal"
-        v-model="welcomeModal.visible"
-        :title="null" 
-        :footer="null"
-        :closable="false"
-        :mask-closable="false"
-        width="450px"
-        :class="themeSwitcher.currentTheme"
-        style="text-align: center;">
-        
+    <a-modal id="welcome-modal" v-model="welcomeModal.visible" :title="null" :footer="null" :closable="false"
+        :mask-closable="false" width="450px" :class="themeSwitcher.currentTheme" style="text-align: center;">
+
         <div style="padding: 20px 10px;">
             <div style="font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #52c41a;">
                 <a-icon type="crown" theme="filled" style="margin-right: 8px;"></a-icon>
-                <span>X-Panel Pro 版</span>
+                <span>X-Panel Pro 尊享版</span>
             </div>
 
             <a-divider style="margin: 15px 0;"></a-divider>
 
             <p style="font-size: 16px; color: #1890ff; font-style: italic; font-weight: 500;">
-                * 美好的一天，从〔X-Panel 面板〕开始！*
+                * 极速、安全、全功能已解锁 *
             </p>
             <p style="font-size: 14px; color: #666;">
-                你当前所使用的版本为：<b>Pro 专业版</b>
+                您当前所使用的版本为：<b>Pro 永久授权版</b>
             </p>
 
-            <div style="background: rgba(0,0,0,0.03); padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left;">
-                
-                <p style="color: #ff4d4f; font-weight: bold; margin-bottom: 15px;">
-                    如需要使用〔Pro 版〕请联系“授权码购买”机器人：
-                    <br>
-                    <a href="https://t.me/Buy_ShouQuan_Bot" target="_blank" style="color: #1890ff; font-weight: bold; text-decoration: underline; margin-left: 10px;">
-                        @Buy_ShouQuan_Bot
-                    </a>
+            <div
+                style="background: rgba(82, 196, 26, 0.1); padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left;">
+                <p style="color: #52c41a; font-weight: bold; margin-bottom: 15px;">
+                    ✅ 核心功能已全部解锁：
                 </p>
+                <ul style="color: #666; font-size: 13px; padding-left: 20px;">
+                    <li>数据快照与远程急救还原</li>
+                    <li>多主题动态流光 UI</li>
+                    <li>一键配置方案与多面板管理</li>
+                    <li>深度系统调优与高级协议支持</li>
+                </ul>
 
                 <a-divider style="margin: 10px 0;"></a-divider>
 
                 <div style="font-size: 14px;">
                     <a-icon type="rocket" style="margin-right: 5px;"></a-icon>
-                    〔X-Panel-Pro 面板〕已实现功能：
+                    〔X-Panel-Pro 面板〕功能概览：
                     <a @click="jumpToProFeatures" style="font-weight: bold; color: #722ed1;">
                         点击查看 <a-icon type="right"></a-icon>
                     </a>
                 </div>
             </div>
 
-            <a-button type="primary" shape="round" size="large" block @click="closeWelcomeModal">
-                进入面板
+            <a-button type="primary" shape="round" size="large" block @click="closeWelcomeModal"
+                style="height: 50px; font-size: 18px; font-weight: bold;">
+                立即开启 Pro 之旅
             </a-button>
         </div>
     </a-modal>
-	<a-modal id="backup-modal"
-		v-model="backupModal.visible"
-		title='{{ i18n "pages.index.backupTitle" }}'
-		:closable="true"
-		footer=""
-		:class="themeSwitcher.currentTheme">
-		<a-list class="ant-backup-list" bordered :style="{ width: '100%' }">
-			<a-list-item class="ant-backup-list-item">
-				<a-list-item-meta>
-					<template #title>{{ i18n "pages.index.exportDatabase" }}</template>
-					<template #description>{{ i18n "pages.index.exportDatabaseDesc" }}</template>
-				</a-list-item-meta>
-				<a-button @click="exportDatabase()" type="primary" icon="download"/>
-			</a-list-item>
-			<a-list-item class="ant-backup-list-item">
-				<a-list-item-meta>
-					<template #title>{{ i18n "pages.index.importDatabase" }}</template>
-					<template #description>{{ i18n "pages.index.importDatabaseDesc" }}</template>
-				</a-list-item-meta>
-				<a-button @click="importDatabase()" type="primary" icon="upload" />
-			</a-list-item>
-		</a-list>
-	</a-modal>
+    <a-modal id="backup-modal" v-model="backupModal.visible" title='{{ i18n "pages.index.backupTitle" }}'
+        :closable="true" footer="" :class="themeSwitcher.currentTheme">
+        <a-list class="ant-backup-list" bordered :style="{ width: '100%' }">
+            <a-list-item class="ant-backup-list-item">
+                <a-list-item-meta>
+                    <template #title>{{ i18n "pages.index.exportDatabase" }}</template>
+                    <template #description>{{ i18n "pages.index.exportDatabaseDesc" }}</template>
+                </a-list-item-meta>
+                <a-button @click="exportDatabase()" type="primary" icon="download" />
+            </a-list-item>
+            <a-list-item class="ant-backup-list-item">
+                <a-list-item-meta>
+                    <template #title>{{ i18n "pages.index.importDatabase" }}</template>
+                    <template #description>{{ i18n "pages.index.importDatabaseDesc" }}</template>
+                </a-list-item-meta>
+                <a-button @click="importDatabase()" type="primary" icon="upload" />
+            </a-list-item>
+        </a-list>
+    </a-modal>
 </a-layout>
-  
+
 {{template "page/body_scripts" .}}
 {{template "component/aSidebar" .}}
 {{template "component/aThemeSwitch" .}}
@@ -849,7 +1025,7 @@
 {{template "modals/textModal"}}
 
 <script>
-    (function() {
+    (function () {
         // 获取今天的日期 (1-31)
         const dayOfMonth = new Date().getDate();
 
@@ -913,12 +1089,12 @@
             this.udpCount = 0;
             this.uptime = 0;
             this.appUptime = 0;
-            this.appStats = {threads: 0, mem: 0, uptime: 0};
+            this.appStats = { threads: 0, mem: 0, uptime: 0 };
 
             this.xray = { state: 'stop', stateMsg: "", errorMsg: "", version: "", color: "" };
 
             if (data == null) {
-              return;
+                return;
             }
 
             this.cpu = new CurTotal(data.cpu, 100);
@@ -949,7 +1125,7 @@
                     break;
                 case 'error':
                     this.xray.color = "red";
-                    this.xray.stateMsg ='{{ i18n "pages.index.xrayStatusError" }}';
+                    this.xray.stateMsg = '{{ i18n "pages.index.xrayStatusError" }}';
                     break;
                 default:
                     this.xray.color = "gray";
@@ -980,35 +1156,35 @@
         loading: false,
         show(logs) {
             this.visible = true;
-            this.logs = logs; 
+            this.logs = logs;
             this.formattedLogs = this.logs?.length > 0 ? this.formatLogs(this.logs) : "No Record...";
         },
         formatLogs(logs) {
             let formattedLogs = '';
-            const levels = ["DEBUG","INFO","NOTICE","WARNING","ERROR"];
-            const levelColors = ["#3c89e8","#008771","#008771","#f37b24","#e04141","#bcbcbc"];
+            const levels = ["DEBUG", "INFO", "NOTICE", "WARNING", "ERROR"];
+            const levelColors = ["#3c89e8", "#008771", "#008771", "#f37b24", "#e04141", "#bcbcbc"];
 
             logs.forEach((log, index) => {
-                let [data, message] = log.split(" - ",2);
+                let [data, message] = log.split(" - ", 2);
                 const parts = data.split(" ")
-                if(index>0) formattedLogs += '<br>';
+                if (index > 0) formattedLogs += '<br>';
 
                 if (parts.length === 3) {
                     const d = parts[0];
                     const t = parts[1];
                     const level = parts[2];
-                    const levelIndex = levels.indexOf(level,levels) || 5;
+                    const levelIndex = levels.indexOf(level, levels) || 5;
 
                     //formattedLogs += `<span style="color: gray;">${index + 1}.</span>`;
                     formattedLogs += `<span style="color: ${levelColors[0]};">${d} ${t}</span> `;
                     formattedLogs += `<span style="color: ${levelColors[levelIndex]}">${level}</span>`;
                 } else {
-                    const levelIndex = levels.indexOf(data,levels) || 5;
+                    const levelIndex = levels.indexOf(data, levels) || 5;
                     formattedLogs += `<span style="color: ${levelColors[levelIndex]}">${data}</span>`;
                 }
 
-                if(message){
-                    if(message.startsWith("XRAY:"))
+                if (message) {
+                    if (message.startsWith("XRAY:"))
                         message = "<b>XRAY: </b>" + message.substring(5);
                     else
                         message = "<b>X-UI: </b>" + message;
@@ -1040,25 +1216,25 @@
         formatLogs(logs) {
             let formattedLogs = '';
 
-          logs.forEach((log, index) => {
-            if(index > 0) formattedLogs += '<br>';
+            logs.forEach((log, index) => {
+                if (index > 0) formattedLogs += '<br>';
 
-            const parts = log.split(' ');
+                const parts = log.split(' ');
 
-            if(parts.length === 10) {
-              const dateTime = `<b>${parts[0]} ${parts[1]}</b>`;
-              const from = `<b>${parts[3]}</b>`;
-              const to = `<b>${parts[5].replace(/^\/+/, "")}</b>`;
+                if (parts.length === 10) {
+                    const dateTime = `<b>${parts[0]} ${parts[1]}</b>`;
+                    const from = `<b>${parts[3]}</b>`;
+                    const to = `<b>${parts[5].replace(/^\/+/, "")}</b>`;
 
-              let outboundColor = '';
-              if (parts[9] === "b") {
-                outboundColor = ' style="color: #e04141;"'; //red for blocked
-              }
-              else if (parts[9] === "p") {
-                outboundColor = ' style="color: #3c89e8;"'; //blue for proxies
-              }
+                    let outboundColor = '';
+                    if (parts[9] === "b") {
+                        outboundColor = ' style="color: #e04141;"'; //red for blocked
+                    }
+                    else if (parts[9] === "p") {
+                        outboundColor = ' style="color: #3c89e8;"'; //blue for proxies
+                    }
 
-              formattedLogs += `<span${outboundColor}>
+                    formattedLogs += `<span${outboundColor}>
 ${dateTime}
  ${parts[2]}
  ${from}
@@ -1066,10 +1242,10 @@ ${dateTime}
  ${to}
  ${parts.slice(6, 9).join(' ')}
 </span>`;
-            } else {
-              formattedLogs += `<span>${log}</span>`;
-            }
-          });
+                } else {
+                    formattedLogs += `<span>${log}</span>`;
+                }
+            });
 
             return formattedLogs;
         },
@@ -1081,10 +1257,10 @@ ${dateTime}
     const backupModal = {
         visible: false,
         show() {
-          this.visible = true;
+            this.visible = true;
         },
         hide() {
-          this.visible = false;
+            this.visible = false;
         },
     };
 
@@ -1095,8 +1271,8 @@ ${dateTime}
         data: {
             themeSwitcher,
             loadingStates: {
-              fetched: false,
-              spinning: false
+                fetched: false,
+                spinning: false
             },
 
             // 新增 welcomeModal 数据对象
@@ -1172,8 +1348,8 @@ ${dateTime}
                     onOk: async () => {
                         versionModal.hide();
                         this.loading(true, '{{ i18n "pages.index.dontRefresh"}}');
-                        const url = isSingleFile 
-                            ? `/panel/api/server/updateGeofile/${fileName}` 
+                        const url = isSingleFile
+                            ? `/panel/api/server/updateGeofile/${fileName}`
                             : `/panel/api/server/updateGeofile`;
                         await HttpUtil.post(url);
                         this.loading(false);
@@ -1196,9 +1372,9 @@ ${dateTime}
                     return;
                 }
             },
-            async openLogs(){
+            async openLogs() {
                 logModal.loading = true;
-                const msg = await HttpUtil.post('/panel/api/server/logs/'+logModal.rows,{level: logModal.level, syslog: logModal.syslog});
+                const msg = await HttpUtil.post('/panel/api/server/logs/' + logModal.rows, { level: logModal.level, syslog: logModal.syslog });
                 if (!msg.success) {
                     return;
                 }
@@ -1206,15 +1382,15 @@ ${dateTime}
                 await PromiseUtil.sleep(500);
                 logModal.loading = false;
             },
-            async openXrayLogs(){
-              xraylogModal.loading = true;
-                const msg = await HttpUtil.post('/panel/api/server/xraylogs/'+xraylogModal.rows,{filter: xraylogModal.filter, showDirect: xraylogModal.showDirect, showBlocked: xraylogModal.showBlocked, showProxy: xraylogModal.showProxy});
+            async openXrayLogs() {
+                xraylogModal.loading = true;
+                const msg = await HttpUtil.post('/panel/api/server/xraylogs/' + xraylogModal.rows, { filter: xraylogModal.filter, showDirect: xraylogModal.showDirect, showBlocked: xraylogModal.showBlocked, showProxy: xraylogModal.showProxy });
                 if (!msg.success) {
                     return;
                 }
-              xraylogModal.show(msg.obj);
+                xraylogModal.show(msg.obj);
                 await PromiseUtil.sleep(500);
-              xraylogModal.loading = false;
+                xraylogModal.loading = false;
             },
             async openConfig() {
                 this.loading(true);
@@ -1226,47 +1402,9 @@ ${dateTime}
                 txtModal.show('config.json', JSON.stringify(msg.obj, null, 2), 'config.json');
             },
 
-            // 按钮 1 触发的方法：显示付费提示
+            // 按钮 1 触发的方法：执行导出数据库 (已解锁)
             async performRemoteBackup() {
-                // 注意：这里删除了 this.visible = false，因为在主页上下文中没有弹窗需要关闭，直接弹警告即可
-                
-                // 使用 Vue 的 createElement 函数构建支持 HTML 的提示内容
-                const h = this.$createElement;
-                
-                // 弹出警告提示框
-                this.$warning({
-                    title: '功能受限提示',
-                    okText: '知道了',
-                    // 【核心修改点 1】：调整弹窗宽度，使其足够容纳一行文字
-                    width: 580, 
-                    // 这里定义提示框的具体内容和样式
-                    content: h('div', { style: 'margin-top: 10px; font-size: 15px; line-height: 1.6;' }, [ // 增加行高，提升阅读体验
-                        
-                        // 第一段：设置底部外边距，模拟空行
-                        h('p', { style: 'margin-bottom: 15px;' }, '此项功能是“付费Pro版”专属功能，免费版不能用，'), 
-                        
-                        // 第二段：设置底部外边距，模拟空行
-                        h('p', { style: 'margin-bottom: 15px;' }, '请联系面板管理员〔购买授权码〕之后才能继续使用。'), 
-                        
-                        // 第三段：TG 链接（无需底部外边距）
-                        h('p', { style: 'color: #ff4d4f; font-weight: bold; margin-bottom: 0;' }, [
-                            '----->>> “授权码购买”机器人：',
-                            h('a', { 
-                                // 设置跳转链接到 Telegram
-                                attrs: { 
-                                    href: 'https://t.me/Buy_ShouQuan_Bot', 
-                                    target: '_blank' // 在新标签页打开
-                                }, 
-                                style: { 
-                                    color: '#1890ff', // 链接颜色
-                                    fontWeight: 'bold',
-                                    textDecoration: 'underline' // 链接下划线
-                                } 
-                            }, '@Buy_ShouQuan_Bot')
-                        ]),
-                    ]),
-                    onOk() {}
-                });
+                this.exportDatabase();
             },
 
             // 1. 关闭弹窗并记录状态
@@ -1282,16 +1420,16 @@ ${dateTime}
                 // 根据 Sidebar 逻辑拼接路径
                 // 注意：这里默认跳转到 navigation 页面。
                 // 如果 navigation 页面支持 ?tab=3 这种参数请保留参数，不支持则只会跳转到默认页
-                window.location.href = '{{ .base_path }}panel/navigation?tab=3'; 
+                window.location.href = '{{ .base_path }}panel/navigation?tab=3';
             },
 
-            // 按钮 2 触发的方法：显示相同的提示
+            // 按钮 2 触发的方法：执行导入数据库 (已解锁)
             async performRemoteRestore() {
-                 this.performRemoteBackup();
+                this.importDatabase();
             },
 
             openBackup() {
-              backupModal.show();
+                backupModal.show();
             },
             exportDatabase() {
                 window.location = basePath.replace(/\/$/, '') + '/panel/api/server/getDb';
@@ -1342,7 +1480,7 @@ ${dateTime}
 
             const msg = await HttpUtil.post('/panel/setting/defaultSettings');
             if (msg.success) {
-              this.ipLimitEnable = msg.obj.ipLimitEnable;
+                this.ipLimitEnable = msg.obj.ipLimitEnable;
             }
 
             while (true) {
