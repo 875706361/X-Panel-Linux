@@ -29,7 +29,7 @@
 ## Instalar y Actualizar
 
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/master/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh)
 ```
 
 ## Instalar una Versión Personalizada
@@ -37,7 +37,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/master
 Para instalar la versión deseada, agrega la versión al final del comando de instalación. Por ejemplo, ver `v2.4.1`:
 
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/master/install.sh) v2.4.1
+bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh) v2.4.1
 ```
 
 ## Certificado SSL

@@ -202,7 +202,7 @@ custom_version() {
         exit 1
     fi
 
-    download_link="https://raw.githubusercontent.com/875706361/X-Panel-Linux/master/install.sh"
+    download_link="https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh"
 
     # Use the entered panel version in the download link
     install_command="bash <(curl -Ls $download_link) v$panel_version"
@@ -236,7 +236,7 @@ uninstall() {
     echo ""
     echo -e "卸载成功\n"
     echo "如果您需要再次安装此面板，可以使用以下命令:"
-    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/master/install.sh)${plain}"
+    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh)${plain}"
     echo ""
     # Trap the SIGTERM signal
     trap delete_script SIGTERM

@@ -150,7 +150,7 @@
 ## ✰如何从其他x-ui版本迁移到〔X-Panel面板〕？✰
 #### 1、若你用的是伊朗老哥的3X-UI，是可以直接〔覆盖安装〕的，因为数据库文件等位置是没有改变的，所以直接覆盖安装，并不会影响你〔原有节点及配置〕等数据；安装命令如下：
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/master/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh)
 ```
 #### 2、若你之前用的是Docker方式安装，那先进入容器里面/命令：docker exec -it 容器id /bin/sh，再执行以上脚本命令直接【覆盖安装】即可，
 #### 3、若你用的是之前F佬的x-ui或者其他分支版本，那直接覆盖安装的话，并不能确保一定就能够兼容？建议你先去备份〔数据库〕配置文件，再进行安装〔X-Panel面板〕。
@@ -203,7 +203,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/master
 
 - 【全新安装】请执行以下脚本：
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/master/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh)
 ```
 #### 如果执行了上面的代码但是报错，证明你的系统里面没有curl这个软件，请执行以下命令先安装curl软件，安装curl之后再去执行上面代码，
 ```

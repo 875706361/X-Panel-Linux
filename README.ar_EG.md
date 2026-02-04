@@ -23,7 +23,7 @@
 ## البدء السريع
 
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/master/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh)
 ```
 
 للحصول على الوثائق الكاملة، يرجى زيارة [ويكي المشروع](https://github.com/875706361/X-Panel-Linux/wiki).

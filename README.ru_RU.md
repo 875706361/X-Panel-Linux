@@ -23,7 +23,7 @@
 ## Быстрый старт
 
 ```
-bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/master/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh)
 ```
 
 Полную документацию смотрите в [вики проекта](https://github.com/875706361/X-Panel-Linux/wiki).
