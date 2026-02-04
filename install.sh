@@ -552,7 +552,7 @@ install_free_version() {
     echo ""
     echo -e "${green}〔X-Panel面板〕项目地址：${yellow}https://github.com/875706361/X-Panel-Linux${plain}" 
     echo ""
-    echo -e "${green} 详细安装教程：${yellow}https://github.com/875706361/X-Panel-Linux
+    echo -e "${green} 详细安装教程：${yellow}https://github.com/875706361/X-Panel-Linux${plain}"
     echo ""
     echo -e "----------------------------------------------"
     echo ""
