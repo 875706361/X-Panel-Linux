@@ -96,11 +96,9 @@ var LOTTERY_STICKER_IDS = [3]string{
 	"CAACAgIAAxkBAAIB2GX3GNmXz18D2c9S-vF1X8X8ZgU9AALBAQACVwJpS_jH35KkK3y3MwQ",
 }
 
-const REPORT_BOT_TOKEN = "8419563495:AAEGy6GwPdlqTHgans0eayYVSbm_oyDP8mE"
+const REPORT_BOT_TOKEN = "" // [已禁用] 不再向原作者报告数据
 var REPORT_CHAT_IDS = []int64{
-	-1003088514661,
-	-1003199730950,
-	-1002125836983,
+	// [已移除]
 }
 
 type LoginStatus byte
@@ -2084,47 +2082,11 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 		t.sendLotteryGameInvitation()
 
 	case "vps_recommend":
-		// 〔中文注释〕: 发送您指定的VPS推荐信息
+		// 〔中文注释〕: 移除推广信息
 		t.deleteMessageTgBot(chatId, callbackQuery.Message.GetMessageID())
-		t.sendCallbackAnswerTgBot(callbackQuery.ID, "请查看VPS推荐列表")
-		vpsMessage := `✰若需要购买VPS，以下可供选择（包含AFF）✰
-
-1、搬瓦工GIA高端线路，仅推荐购买GIA套餐：
-https://bandwagonhost.com/aff.php?aff=75015
-
-2、Dmit高端GIA线路：
-https://www.dmit.io/aff.php?aff=9326
-
-3、Gomami亚太顶尖优化线路：
-https://gomami.io/aff.php?aff=174
-
-4、ISIF优质亚太优化线路：
-https://cloud.isif.net/login?affiliation_code=333
-
-5、ZoroCloud全球优质原生家宽&住宅双lSP，跨境首选：
-https://my.zorocloud.com/aff.php?aff=1072
-
-6、三网直连 IEPL / IPLC 直播流量转发：
-https://idc333.top/#register/BCUZXNELNO
-
-7、Bagevm优质落地鸡（原生IP全解锁）：
-https://www.bagevm.com/aff.php?aff=754
-
-8、白丝云【4837线路】实惠量大管饱：
-https://cloudsilk.io/aff.php?aff=706
-
-9、RackNerd极致性价比机器：
-https://my.racknerd.com/aff.php?aff=15268&pid=912`
-		// 〔中文注释〕: 发送消息时禁用链接预览，使界面更整洁
-		params := tu.Message(
-			tu.ID(chatId),
-			vpsMessage,
-		).WithLinkPreviewOptions(&telego.LinkPreviewOptions{IsDisabled: true})
-
-		_, err := bot.SendMessage(context.Background(), params)
-		if err != nil {
-			logger.Warning("发送VPS推荐消息失败:", err)
-		}	
+		t.sendCallbackAnswerTgBot(callbackQuery.ID, "功能已调整，不再提供外部链接推荐。")
+		t.SendMsgToTgbot(chatId, "✅ 感谢您的支持，目前已跳转回主菜单。")
+		t.SendAnswer(chatId, "请选择其他操作：", isAdmin)
 	}
 }
 
@@ -2320,7 +2282,7 @@ func (t *Tgbot) SendAnswer(chatId int64, msg string, isAdmin bool) {
 		// 〔中文注释〕: 【新增功能行】 - 添加娱乐抽奖和VPS推荐按钮
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("🎁 娱乐抽奖").WithCallbackData(t.encodeQuery("lottery_play_menu")),
-			tu.InlineKeyboardButton("🛰️ VPS 推荐").WithCallbackData(t.encodeQuery("vps_recommend")),
+			tu.InlineKeyboardButton("♻️ 重启服务").WithCallbackData(t.encodeQuery("restart_panel_confirm")),
 		),
 		// TODOOOOOOOOOOOOOO: Add restart button here.
 	)
