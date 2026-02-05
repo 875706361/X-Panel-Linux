@@ -230,89 +230,53 @@ install_free_version() {
     echo ""
     install_x-ui() {
         cd /usr/local/
-
-        if [[ -z "$GITHUB_TOKEN" ]]; then
-            echo -e "${red}错误: 检测到私有仓库安装，未找到 GITHUB_TOKEN 环境变量。${plain}"
-            echo -e "${yellow}请在运行脚本前设置: export GITHUB_TOKEN=your_token${plain}"
-            exit 1
-        fi
         
-        # Helper for authenticated API calls
-        api_req() {
-            curl -s -H "Authorization: token $GITHUB_TOKEN" "$@"
-        }
-
         # Download resources
         if [ $# == 0 ]; then
-            release_json=$(api_req "https://api.github.com/repos/875706361/X-Panel-Linux/releases/latest")
-            last_version=$(echo "$release_json" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-            
+            last_version=$(curl -Ls "https://api.github.com/repos/875706361/X-Panel-Linux/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
             if [[ ! -n "$last_version" ]]; then
-                echo -e "${red}获取 X-Panel 版本失败，请检查 GITHUB_TOKEN 是否有效${plain}"
+                echo -e "${red}获取 X-Panel 版本失败，可能是 Github API 限制，请稍后再试${plain}"
                 exit 1
             fi
             echo ""
             echo -e "-----------------------------------------------------"
             echo -e "${green}--------->>获取 X-Panel 最新版本：${yellow}${last_version}${plain}${green}，开始安装...${plain}"
             echo -e "-----------------------------------------------------"
+            echo ""
+            sleep 2
+            echo -e "${green}---------------->>>>>>>>>安装进度50%${plain}"
+            sleep 3
+            echo ""
+            echo -e "${green}---------------->>>>>>>>>>>>>>>>>>>>>安装进度100%${plain}"
+            echo ""
+            sleep 2
+            wget -N --no-check-certificate -O /usr/local/x-ui-linux-$(arch).tar.gz https://github.com/875706361/X-Panel-Linux/releases/download/${last_version}/x-ui-linux-$(arch).tar.gz
+            if [[ $? -ne 0 ]]; then
+                echo -e "${red}下载 X-Panel 失败, 请检查服务器是否可以连接至 GitHub？ ${plain}"
+                exit 1
+            fi
         else
             last_version=$1
-            # For specific tag, get that release
-            release_json=$(api_req "https://api.github.com/repos/875706361/X-Panel-Linux/releases/tags/${last_version}")
-            if [[ $(echo "$release_json" | grep "Not Found") ]]; then
-                 echo -e "${red}未找到版本 $1${plain}"
-                 exit 1
-            fi
+            url="https://github.com/875706361/X-Panel-Linux/releases/download/${last_version}/x-ui-linux-$(arch).tar.gz"
             echo ""
             echo -e "--------------------------------------------"
             echo -e "${green}---------------->>>>开始安装 X-Panel 免费基础版$1${plain}"
             echo -e "--------------------------------------------"
+            echo ""
+            sleep 2
+            echo -e "${green}---------------->>>>>>>>>安装进度50%${plain}"
+            sleep 3
+            echo ""
+            echo -e "${green}---------------->>>>>>>>>>>>>>>>>>>>>安装进度100%${plain}"
+            echo ""
+            sleep 2
+            wget -N --no-check-certificate -O /usr/local/x-ui-linux-$(arch).tar.gz ${url}
+            if [[ $? -ne 0 ]]; then
+                echo -e "${red}下载 X-Panel $1 失败, 请检查此版本是否存在 ${plain}"
+                exit 1
+            fi
         fi
-
-        sleep 2
-        echo -e "${green}---------------->>>>>>>>>安装进度50%${plain}"
-        
-        # Parse Asset ID for current architecture
-        target_arch=$(arch)
-        target_file="x-ui-linux-${target_arch}.tar.gz"
-        
-        # Simple grep-based parser for Asset ID - relies on standard GitHub JSON formatting
-        # Look for the filename, then look backwards or forwards for the ID inside the same object block?
-        # JSON structure usually: { "id": 123, ..., "name": "filename", ... }
-        # Using python one-liner is safer if available
-        
-        asset_id=""
-        if command -v python3 &>/dev/null; then
-             asset_id=$(echo "$release_json" | python3 -c "import sys, json; data = json.load(sys.stdin); print(next((a['id'] for a in data.get('assets', []) if a['name'] == '${target_file}'), ''))")
-        else
-             # Fallback to simple text processing (less robust)
-             # Extract lines related to assets, try to match name and get ID
-             # This is risky, but we'll try to find the block
-             echo -e "${yellow}警告: 未检测到 python3，使用文本匹配模式解析资源 ID${plain}"
-             asset_id=$(echo "$release_json" | grep -C 10 "${target_file}" | grep '"id":' | head -n 1 | awk '{print $2}' | tr -d ',')
-        fi
-        
-        if [[ ! -n "$asset_id" ]]; then
-            echo -e "${red}无法找到架构 ${target_arch} 的下载资源 (Asset ID Not Found)${plain}"
-            exit 1
-        fi
-
-        echo -e "${green}---------------->>>>>>>>>>>>>>>>>>>>>下载资源 ID: ${asset_id}${plain}"
-        
-        # Download Asset
-        curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
-             "https://api.github.com/repos/875706361/X-Panel-Linux/releases/assets/$asset_id" \
-             -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
-
-        if [[ $? -ne 0 ]]; then
-            echo -e "${red}下载 X-Panel 失败${plain}"
-            exit 1
-        fi
-
-        # Download x-ui.sh script (using Raw content API)
-        api_req -H "Accept: application/vnd.github.v3.raw" \
-            "https://api.github.com/repos/875706361/X-Panel-Linux/contents/x-ui.sh" \
-            -o /usr/bin/x-ui-temp
+        wget -O /usr/bin/x-ui-temp https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/x-ui.sh
 
         # Stop x-ui service and remove old resources
         if [[ -e /usr/local/x-ui/ ]]; then
