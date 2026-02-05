@@ -16,3 +16,13 @@ func RandomInt(max int) int {
 	}
 	return int(n.Int64())
 }
+
+// RandomLowerAndNum 返回指定长度的随机小写字母+数字字符串
+func RandomLowerAndNum(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[RandomInt(len(charset))]
+	}
+	return string(b)
+}

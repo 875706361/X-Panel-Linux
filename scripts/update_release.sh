@@ -1,7 +1,7 @@
 #!/bin/bash
 TOKEN="${GITHUB_TOKEN:-YOUR_GITHUB_TOKEN}"
 REPO="875706361/X-Panel-Linux"
-TAG="v26.2.3"
+TAG="v26.2.6"
 
 # 获取 Release ID
 RELEASE_ID=$(curl -s -H "Authorization: token $TOKEN" "https://api.github.com/repos/$REPO/releases/tags/$TAG" | grep -m 1 '"id":' | awk '{print $2}' | sed 's/,//')

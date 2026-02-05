@@ -64,9 +64,9 @@
             inModal.inbound.settings.testseed[index] = value;
         },
 
-         /**
-         * 优化后的随机 Vision Seed 生成函数 (inModal 全局对象版)
-         */
+        /**
+        * 优化后的随机 Vision Seed 生成函数 (inModal 全局对象版)
+        */
         setRandomTestseed() {
             // 确保对象存在
             if (!inModal.inbound || !inModal.inbound.settings) return;
@@ -96,7 +96,7 @@
 
     // 全局存储 Vue 实例以确保方法始终可访问
     let inboundModalVueInstance = null;
-    
+
     inboundModalVueInstance = new Vue({
         delimiters: ['[[', ']]'],
         el: '#inbound-modal',
@@ -180,7 +180,7 @@
             },
             SSMethodChange() {
                 this.inModal.inbound.settings.password = RandomUtil.randomShadowsocksPassword(this.inModal.inbound.settings.method)
-                
+
                 if (this.inModal.inbound.isSSMultiUser) {
                     if (this.inModal.inbound.settings.shadowsockses.length == 0) {
                         this.inModal.inbound.settings.shadowsockses = [new Inbound.ShadowsocksSettings.Shadowsocks()];
@@ -237,7 +237,7 @@
                 inModal.inbound.stream.tls.echServerKeys = msg.obj.echServerKeys;
                 inModal.inbound.stream.tls.settings.echConfigList = msg.obj.echConfigList;
             },
-                async getNewVlessEnc() {
+            async getNewVlessEnc() {
                 inModal.loading(true);
                 const msg = await HttpUtil.get('/panel/api/server/getNewVlessEnc');
                 inModal.loading(false);
@@ -262,7 +262,7 @@
                 this.inbound.settings.decryption = 'none';
                 this.inbound.settings.encryption = '';
             },
-            
+
             // Vision Seed 方法 - 必须在 Vue methods 中以进行正确的绑定
             updateTestseed(index, value) {
                 if (!this.inbound.settings.testseed || !Array.isArray(this.inbound.settings.testseed)) {
@@ -305,8 +305,28 @@
             resetTestseed() {
                 // 使用 Vue.set 重置为默认值
                 this.$set(this.inbound.settings, 'testseed', [900, 500, 900, 256]);
+            },
+
+            // [已解锁] Reality 域名随机更换
+            setRandomRealityDomain() {
+                const domains = [
+                    { target: 'www.microsoft.com:443', sni: 'www.microsoft.com' },
+                    { target: 'www.lovelive-anime.jp:443', sni: 'www.lovelive-anime.jp' },
+                    { target: 'www.apple.com:443', sni: 'www.apple.com' },
+                    { target: 'www.google.com:443', sni: 'www.google.com' },
+                    { target: 'www.tesla.com:443', sni: 'www.tesla.com' },
+                    { target: 'www.nvidia.com:443', sni: 'www.nvidia.com' },
+                    { target: 'www.youtube.com:443', sni: 'www.youtube.com' },
+                    { target: 'www.netflix.com:443', sni: 'www.netflix.com' },
+                    { target: 'www.amazon.com:443', sni: 'www.amazon.com' },
+                    { target: 'www.cloudflare.com:443', sni: 'www.cloudflare.com' }
+                ];
+                const random = domains[Math.floor(Math.random() * domains.length)];
+                this.inbound.stream.reality.target = random.target;
+                this.inbound.stream.reality.serverNames = random.sni;
+                this.$message.success('已随机更换域名为: ' + random.sni);
             }
-                
+
         },
     });
 

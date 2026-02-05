@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"bytes"
+	"os/exec"
 
 	"x-ui/database"
 	"x-ui/database/model"
@@ -14,6 +16,7 @@ import (
 	"x-ui/util/common"
 	"x-ui/xray"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -2195,7 +2198,9 @@ func (s *InboundService) MigrationRequirements() {
 				if _, ok := c["created_at"]; !ok {
 					c["created_at"] = time.Now().Unix() * 1000
 				}
-				c["updated_at"] = time.Now().Unix() * 1000
+				if _, ok := c["updated_at"]; !ok {
+					c["updated_at"] = time.Now().Unix() * 1000
+				}
 
 		 // 中文注释: 回填 speedLimit，如果不存在设为 0，确保旧数据有字段，避免显示和配置问题
                 if _, ok := c["speedLimit"]; !ok {
@@ -2336,4 +2341,126 @@ func (s *InboundService) FilterAndSortClientEmails(emails []string) ([]string, [
 	}
 
 	return validEmails, extraEmails, nil
+}
+
+// [已解锁] 一键创建配置逻辑
+func (s *InboundService) CreateOneClickConfig(configType string) error {
+	inbound := &model.Inbound{
+		Enable:  true,
+		Listen:  "",
+		Port:    common.RandomInt(50000) + 10000, // 随机端口 10000-60000
+		UserId:  1, // 默认管理员
+	}
+
+	client := model.Client{
+		ID:    uuid.New().String(),
+		Email: "oneclick_" + common.RandomLowerAndNum(6),
+		Enable: true,
+	}
+
+	clientJson, _ := json.Marshal(client)
+
+	switch configType {
+	case "reality":
+		inbound.Remark = "🚀 Reality+Vision-OneClick"
+		inbound.Protocol = "vless"
+		client.Flow = "xtls-rprx-vision"
+		// 重新序列化，因为 client 字段变了
+		clientJson, _ = json.Marshal(client)
+		inbound.Settings = fmt.Sprintf(`{
+			"clients": [ %s ],
+			"decryption": "none",
+			"fallbacks": []
+		}`, string(clientJson))
+		inbound.StreamSettings = `{
+			"network": "tcp",
+			"security": "reality",
+			"realitySettings": {
+				"show": false,
+				"dest": "www.microsoft.com:443",
+				"xver": 0,
+				"serverNames": [ "www.microsoft.com" ],
+				"privateKey": "",
+				"publicKey": "",
+				"shortIds": [ "6f2c7d8a", "" ]
+			},
+			"tcpSettings": {
+				"header": { "type": "none" }
+			}
+		}`
+		// 自动生成公私钥
+		inbound.Tag = "inbound-" + strconv.Itoa(inbound.Port)
+		// 注意：这里的 privateKey 需要后面补全，或者调用 xrayApi 生成
+	case "xhttp_reality":
+		inbound.Remark = "⚡ XHTTP+Reality-OneClick"
+		inbound.Protocol = "vless"
+		inbound.Settings = fmt.Sprintf(`{
+			"clients": [ %s ],
+			"decryption": "none",
+			"fallbacks": []
+		}`, string(clientJson))
+		inbound.StreamSettings = `{
+			"network": "xhttp",
+			"security": "reality",
+			"realitySettings": {
+				"show": false,
+				"dest": "www.apple.com:443",
+				"xver": 0,
+				"serverNames": [ "www.apple.com" ],
+				"privateKey": "",
+				"publicKey": "",
+				"shortIds": [ "8b2c9d0a", "" ]
+			},
+			"xhttpSettings": {
+				"path": "/oneclick",
+				"mode": "stream"
+			}
+		}`
+	case "tls":
+		inbound.Remark = "🛡️ XHTTP+TLS-OneClick"
+		inbound.Protocol = "vless"
+		inbound.Settings = fmt.Sprintf(`{
+			"clients": [ %s ],
+			"decryption": "none",
+			"fallbacks": []
+		}`, string(clientJson))
+		inbound.StreamSettings = `{
+			"network": "xhttp",
+			"security": "tls",
+			"tlsSettings": {
+				"serverName": "example.com",
+				"certificates": [
+					{
+						"certificateFile": "/etc/X-Panel/x-ui.crt",
+						"keyFile": "/etc/X-Panel/x-ui.key"
+					}
+				]
+			},
+			"xhttpSettings": {
+				"path": "/secure",
+				"mode": "stream"
+			}
+		}`
+	default:
+		return fmt.Errorf("unknown config type: %s", configType)
+	}
+
+	// 补全 Reality 私钥 (如果是 Reality)
+	if strings.Contains(inbound.StreamSettings, "reality") {
+		cmd := exec.Command(xray.GetBinaryPath(), "x25519")
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		if err := cmd.Run(); err == nil {
+			lines := strings.Split(out.String(), "\n")
+			if len(lines) >= 2 {
+				privateKey := strings.TrimSpace(strings.Split(lines[0], ":")[1])
+				publicKey := strings.TrimSpace(strings.Split(lines[1], ":")[1])
+				inbound.StreamSettings = strings.Replace(inbound.StreamSettings, `"privateKey": ""`, fmt.Sprintf(`"privateKey": "%s"`, privateKey), 1)
+				inbound.StreamSettings = strings.Replace(inbound.StreamSettings, `"publicKey": ""`, fmt.Sprintf(`"publicKey": "%s"`, publicKey), 1)
+			}
+		}
+	}
+
+	_, _, err := s.AddInbound(inbound)
+	return err
 }

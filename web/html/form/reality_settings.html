@@ -12,10 +12,17 @@
             <a-select-option v-for="key in UTLS_FINGERPRINT" :value="key">[[ key ]]</a-select-option>
         </a-select>
     </a-form-item>
-    <a-form-item label='Target'>
+    <a-form-item>
+        <template slot="label">
+            Target <a-icon @click="setRandomRealityDomain" type="sync"
+                style="cursor: pointer; margin-left: 5px;"></a-icon>
+        </template>
         <a-input v-model.trim="inbound.stream.reality.target"></a-input>
     </a-form-item>
-    <a-form-item label='SNI'>
+    <a-form-item>
+        <template slot="label">
+            SNI <a-icon @click="setRandomRealityDomain" type="sync" style="cursor: pointer; margin-left: 5px;"></a-icon>
+        </template>
         <a-input v-model.trim="inbound.stream.reality.serverNames"></a-input>
     </a-form-item>
     <a-form-item label='Max Time Diff (ms)'>

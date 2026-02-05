@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================================
-# X-Panel 统一安装脚本 (付费/免费二合一)
+# X-Panel 安装脚本
 # 作者: X-Panel
 # ==========================================================
 
@@ -13,49 +13,6 @@ plain='\033[0m'
 
 # check root
 [[ $EUID -ne 0 ]] && echo -e "${red}致命错误: ${plain} 请使用 root 权限运行此脚本\n" && exit 1
-
-# ----------------------------------------------------------
-# 获取机器唯一硬件标识 (HWID)
-# ----------------------------------------------------------
-get_hwid() {
-    local machine_id=""
-
-    # 1. 优先尝试获取 DMI Product UUID (VPS 硬件 ID，重装系统通常不变)
-    if [[ -r /sys/class/dmi/id/product_uuid ]]; then
-        machine_id=$(cat /sys/class/dmi/id/product_uuid)
-    
-    # 2. 其次尝试获取 eth0 网卡 MAC 地址 (大部分 VPS 重装后 MAC 不变)
-    elif [[ -r /sys/class/net/eth0/address ]]; then
-        machine_id=$(cat /sys/class/net/eth0/address)
-        
-    # 3. 如果都失败，才使用 machine-id (重装会变，作为最后兜底)
-    elif [[ -f /etc/machine-id ]]; then
-        machine_id=$(cat /etc/machine-id)
-    else
-        machine_id=$(hostname)
-    fi
-    
-    # 取 MD5 作为唯一指纹，确保格式统一
-    echo -n "$machine_id" | md5sum | awk '{print $1}'
-}
-
-# ----------------------------------------------------------
-# 函数：付费Pro版安装逻辑 (install_paid_version)
-# ----------------------------------------------------------
-# 此函数负责获取授权码和IP + 机器指纹，并从远程授权服务器获取并执行付费脚本
-#
-install_paid_version() {
-    echo ""
-    echo -e "${green}您正在安装 【X-Panel Pro版】(已授权专用版)${plain}"
-    echo ""
-    echo -e "${yellow}------------------------------------------------------${plain}"
-    echo ""
-    echo -e "${green}正在跳过授权验证，直接开始安装 Pro 版功能...${plain}"
-    sleep 1
-    
-    # 直接调用安装逻辑
-    install_free_version
-}
 
 
 # ----------------------------------------------------------
@@ -99,20 +56,6 @@ install_free_version() {
     }
 
     echo ""
-    # check_glibc_version() {
-    #    glibc_version=$(ldd --version | head -n1 | awk '{print $NF}')
-
-    #    required_version="2.32"
-    #    if [[ "$(printf '%s\n' "$required_version" "$glibc_version" | sort -V | head -n1)" != "$required_version" ]]; then
-    #        echo -e "${red}------>>>GLIBC版本 $glibc_version 太旧了！ 要求2.32或以上版本${plain}"
-    #        echo -e "${green}-------->>>>请升级到较新版本的操作系统以便获取更高版本的GLIBC${plain}"
-    #        exit 1
-    #    fi
-    #        echo -e "${green}-------->>>>GLIBC版本： $glibc_version（符合高于2.32的要求）${plain}"
-    # }
-    # check_glibc_version
-
-    # echo ""
     echo -e "${yellow}---------->>>>>当前系统的架构为: $(arch)${plain}"
     echo ""
     last_version=$(curl -Ls "https://api.github.com/repos/875706361/X-Panel-Linux/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -287,7 +230,7 @@ install_free_version() {
     echo ""
     install_x-ui() {
         cd /usr/local/
-
+        
         # Download resources
         if [ $# == 0 ]; then
             last_version=$(curl -Ls "https://api.github.com/repos/875706361/X-Panel-Linux/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -366,6 +309,7 @@ install_free_version() {
         sleep 2
         echo ""
         config_after_install
+    }
 
     show_access_info() {
         # 获取 IPv4 和 IPv6 地址
@@ -471,43 +415,8 @@ install_free_version() {
     echo ""
 }
 
-# 免费版安装逻辑函数 (install_free_version) 结束
-
-# ----------------------------------------------------------
-# 脚本主菜单
-# ----------------------------------------------------------
-main_menu() {
-    echo -e "${green}======================================================${plain}"
-    echo -e " 欢迎使用 ${yellow}〔X-Panel 面板〕${plain} 一键安装脚本"
-    echo -e "${green}======================================================${plain}"
-    echo ""
-    echo -e "请选择您要安装的版本:"
-    echo ""
-    echo -e "  ${green}1)${plain} 安装 ${yellow}〔X-Panel 面板〕标准版${plain}"
-    echo ""
-    echo -e "  ${green}2)${plain} 安装 ${yellow}〔X-Panel 面板〕Pro 管理版${plain} (已解锁)"
-    echo ""
-    read -p "请输入您的选择 (1 或 2): " version_choice
-    echo ""
-    
-    case "$version_choice" in
-        1)
-            # 如果选择1，调用标准版函数
-            install_free_version
-            ;;
-        2)
-            # 如果选择2，调用Pro版函数
-            install_paid_version
-            ;;
-        *)
-            echo -e "${red}输入无效, 退出安装。${plain}"
-            exit 1
-            ;;
-    esac
-}
-
 # ----------------------------------------------------------
 # 脚本执行入口
 # ----------------------------------------------------------
 clear
-main_menu
+install_free_version

@@ -10,7 +10,7 @@ if not token:
 
 owner = "875706361"
 repo = "X-Panel-Linux"
-tag = "v26.2.3"
+tag = "v26.2.6"
 
 headers = {
     "Authorization": f"token {token}",

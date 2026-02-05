@@ -800,20 +800,23 @@
       <a-modal :title="`{{ i18n " pages.inbounds.oneClick.title" }}`" :visible="oneClickModalVisible"
         :cancel-text="`{{ i18n " cancel" }}`" :class="themeSwitcher.currentTheme" @cancel="handleOneClickCancel"
         :footer="null">
-        <a-alert message="一键配置 - 已全面解锁" type="success" show-icon>
+        <a-alert message="一键配置" type="success" show-icon>
           <template #description>
-            〔一键配置〕功能已由开发者完全解锁！
-            <br />
-            <br />
-            您现在可以无限制地使用此高级功能。目前支持快速生成常见的 Reality、XHTTP 等协议配置。
+            选择下方协议类型，即可快速创建节点配置。
           </template>
-
           <template #icon><a-icon type="rocket"></a-icon></template>
         </a-alert>
-        <div :style="{ marginTop: '20px', textAlign: 'center' }">
-          <p>
-            🚀 此版本为 X-Panel Pro 全功能版（已解锁） 🚀
-          </p>
+        <div :style="{ marginTop: '20px' }">
+          <a-button type="primary" block @click="createOneClickConfig('reality')" :style="{ marginBottom: '10px' }">
+            🚀 Vless + Reality + Vision
+          </a-button>
+          <a-button type="primary" block @click="createOneClickConfig('xhttp_reality')"
+            :style="{ marginBottom: '10px' }">
+            ⚡ Vless + XHTTP + Reality
+          </a-button>
+          <a-button type="primary" block @click="createOneClickConfig('tls')">
+            🛡️ Vless + XHTTP + TLS
+          </a-button>
         </div>
       </a-modal>
     </a-layout-content>
@@ -1229,6 +1232,28 @@
       handleOneClickCancel() {
         this.oneClickModalVisible = false;
         this.inboundLink = '';          // 关闭时清空链接，以便下次重新打开时显示选项
+      },
+
+      // [已解锁] 创建一键配置
+      async createOneClickConfig(configType) {
+        this.oneClickModalVisible = false;
+        const loadingMessage = this.$message.loading('正在创建 ' + configType + ' 配置，请稍候...', 0);
+
+        try {
+          const msg = await HttpUtil.post('/panel/api/inbounds/createOneClick', { type: configType });
+
+          if (msg.success) {
+            this.$message.success(configType + ' 配置创建成功！');
+            await this.getDBInbounds();
+          } else {
+            this.$message.error('配置创建失败: ' + (msg.msg || '未知错误'));
+          }
+        } catch (err) {
+          console.error('创建一键配置失败:', err);
+          this.$message.error('创建配置失败: ' + err.message);
+        } finally {
+          loadingMessage();
+        }
       },
 
       // 〔中文注释〕: 处理“订阅转换”按钮的点击事件 (已更新为完整逻辑)
