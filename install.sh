@@ -309,7 +309,6 @@ install_free_version() {
         sleep 2
         echo ""
         config_after_install
-    }
 
     show_access_info() {
         # 获取 IPv4 和 IPv6 地址
