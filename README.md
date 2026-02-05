@@ -15,19 +15,12 @@
 
 **如果此项目对你有用，请给一个**:star2:
 
-<p align="left">
-  <a href="https://github.com/875706361/X-Panel-Linux" target="_blank">
-    <img src="./media/buymeacoffe.png" alt="Image">
-  </a>
-</p>
 
-- “支持项目”赞助地址（USDT）：
-- TRC20 ---->>> `TYQEmQp1P65u9bG7KPehgJdvuokfb72YkZ`
-- Polygon ---->>> `0xd20eBE429c2398793178e015B2ca1Dc42601f3Eb`
-- Solana ---->>> `7qVEZuV98QTDN5qUmsFwvqTSvkYpmLtNf8o1sh1mppwR`
-- BSC/BEP20 ---->>> `0xd20eBE429c2398793178e015B2ca1Dc42601f3Eb`
+**如果此项目对你有用，请给一个**:star2:
 
-## [【X-Panel面板】交流群：https://t.me/XUI_CN](https://t.me/XUI_CN)
+## [【X-Panel面板】项目说明]
+
+## [【X-Panel面板】交流群：]()
 ## [【X-Panel面板】详细安装流程步骤](https://github.com/875706361/X-Panel-Linux)
 
 
@@ -904,18 +897,9 @@ XUI_BIN_FOLDER="bin" XUI_DB_FOLDER="/etc/x-ui" go build main.go
 ![6](./media/6.png)
 ![7](./media/7.png)
 
+
 ------------
-## 广告赞助
-- 如果你觉得本项目对你有用，而且你也恰巧有这方面的需求，你也可以选择通过我的购买链接赞助我。
-- [1、搬瓦工GIA高端线路，仅推荐购买GIA套餐：https://bandwagonhost.com/aff.php?aff=75015](https://bandwagonhost.com/aff.php?aff=75015)
-- [2、Dmit高端GIA线路：https://www.dmit.io/aff.php?aff=9326](https://www.dmit.io/aff.php?aff=9326)
-- [3、Gomami亚太顶尖优化线路：https://gomami.io/aff.php?aff=174](https://gomami.io/aff.php?aff=174)
-- [4、ISIF优质亚太优化线路：https://cloud.isif.net/login?affiliation_code=333](https://cloud.isif.net/login?affiliation_code=333)
-- [5、ZoroCloud全球优质原生家宽&住宅双lSP，跨境首选：https://my.zorocloud.com/aff.php?aff=1072](https://my.zorocloud.com/aff.php?aff=1072)
-- [6、三网直连 IEPL / IPLC 直播流量转发：https://idc333.top/#register/BCUZXNELNO](https://idc333.top/#register/BCUZXNELNO)
-- [7、Bagevm优质落地鸡（原生IP全解锁）：https://www.bagevm.com/aff.php?aff=754](https://www.bagevm.com/aff.php?aff=754)
-- [8、白丝云【4837线路】实惠量大管饱：https://cloudsilk.io/aff.php?aff=706](https://cloudsilk.io/aff.php?aff=706)
-- [9、RackNerd极致性价比机器：https://my.racknerd.com/aff.php?aff=15268&pid=912](https://my.racknerd.com/aff.php?aff=15268&pid=912)
+## 特别感谢
 
 ------------
 ## 特别感谢
