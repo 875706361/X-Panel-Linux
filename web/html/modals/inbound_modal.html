@@ -1,0 +1,334 @@
+{{define "modals/inboundModal"}}
+<a-modal id="inbound-modal" v-model="inModal.visible" :title="inModal.title" :dialog-style="{ top: '20px' }"
+    @ok="inModal.ok" :confirm-loading="inModal.confirmLoading" :closable="true" :mask-closable="false"
+    :class="themeSwitcher.currentTheme" :ok-text="inModal.okText" cancel-text='{{ i18n "close" }}'>
+    {{template "form/inbound"}}
+</a-modal>
+<script>
+
+    // 将 inModal 设为全局可用，确保其在任何基础路径下都能工作
+    const inModal = window.inModal = {
+        title: '',
+        visible: false,
+        confirmLoading: false,
+        okText: '{{ i18n "sure" }}',
+        isEdit: false,
+        confirm: null,
+        inbound: new Inbound(),
+        dbInbound: new DBInbound(),
+        ok() {
+            ObjectUtil.execute(inModal.confirm, inModal.inbound, inModal.dbInbound);
+        },
+        show({ title = '', okText = '{{ i18n "sure" }}', inbound = null, dbInbound = null, confirm = (inbound, dbInbound) => { }, isEdit = false }) {
+            this.title = title;
+            this.okText = okText;
+            if (inbound) {
+                this.inbound = Inbound.fromJson(inbound.toJson());
+            } else {
+                this.inbound = new Inbound();
+            }
+            // 始终确保为 VLESS 协议初始化 testseed（即使尚未设置 vision 流）
+            // 这确保了 Vue 的响应式系统能正常工作
+            if (this.inbound.protocol === Protocols.VLESS && this.inbound.settings) {
+                if (!this.inbound.settings.testseed || !Array.isArray(this.inbound.settings.testseed) || this.inbound.settings.testseed.length < 4) {
+                    // 创建新数组以确保 Vue 响应式
+                    this.inbound.settings.testseed = [900, 500, 900, 256].slice();
+                }
+            }
+            if (dbInbound) {
+                this.dbInbound = new DBInbound(dbInbound);
+            } else {
+                this.dbInbound = new DBInbound();
+            }
+            this.confirm = confirm;
+            this.visible = true;
+            this.isEdit = isEdit;
+        },
+        close() {
+            inModal.visible = false;
+            inModal.loading(false);
+        },
+        loading(loading = true) {
+            inModal.confirmLoading = loading;
+        },
+
+        // Vision Seed 方法 - 无论 Vue 上下文如何均可用
+        updateTestseed(index, value) {
+            if (!inModal.inbound || !inModal.inbound.settings) return;
+            if (!inModal.inbound.settings.testseed || !Array.isArray(inModal.inbound.settings.testseed)) {
+                inModal.inbound.settings.testseed = [900, 500, 900, 256];
+            }
+            while (inModal.inbound.settings.testseed.length <= index) {
+                inModal.inbound.settings.testseed.push(0);
+            }
+            inModal.inbound.settings.testseed[index] = value;
+        },
+
+        /**
+        * 优化后的随机 Vision Seed 生成函数 (inModal 全局对象版)
+        */
+        setRandomTestseed() {
+            // 确保对象存在
+            if (!inModal.inbound || !inModal.inbound.settings) return;
+
+            // 确保 testseed 已初始化为数组
+            if (!inModal.inbound.settings.testseed || !Array.isArray(inModal.inbound.settings.testseed) || inModal.inbound.settings.testseed.length < 4) {
+                inModal.inbound.settings.testseed = [900, 500, 900, 256].slice();
+            }
+
+            // 1. 生成 [0] 大包阈值 (500-1000)
+            let threshold = 500 + Math.floor(Math.random() * 501);
+            // 2. 生成 [1] 大包浮动 (0-500)
+            let largeVar = Math.floor(Math.random() * 501);
+            // 3. 生成 [2] 大包目标最低长度 (必须 >= threshold)
+            let targetLength = threshold + Math.floor(Math.random() * 201);
+            // 4. 生成 [3] 小包浮动 (0-300)
+            let smallVar = Math.floor(Math.random() * 301);
+
+            inModal.inbound.settings.testseed = [threshold, largeVar, targetLength, smallVar];
+        },
+
+        resetTestseed() {
+            if (!inModal.inbound || !inModal.inbound.settings) return;
+            inModal.inbound.settings.testseed = [900, 500, 900, 256].slice();
+        }
+    };
+
+    // 全局存储 Vue 实例以确保方法始终可访问
+    let inboundModalVueInstance = null;
+
+    inboundModalVueInstance = new Vue({
+        delimiters: ['[[', ']]'],
+        el: '#inbound-modal',
+        data: {
+            inModal: inModal,
+            delayedStart: false,
+            get inbound() {
+                return inModal.inbound;
+            },
+            get dbInbound() {
+                return inModal.dbInbound;
+            },
+            get isEdit() {
+                return inModal.isEdit;
+            },
+            get client() {
+                return inModal.inbound && inModal.inbound.clients && inModal.inbound.clients.length > 0 ? inModal.inbound.clients[0] : null;
+            },
+            get datepicker() {
+                return app.datepicker;
+            },
+            get delayedExpireDays() {
+                return this.client && this.client.expiryTime < 0 ? this.client.expiryTime / -86400000 : 0;
+            },
+            set delayedExpireDays(days) {
+                this.client.expiryTime = -86400000 * days;
+            },
+            get externalProxy() {
+                return this.inbound.stream.externalProxy.length > 0;
+            },
+            set externalProxy(value) {
+                if (value) {
+                    inModal.inbound.stream.externalProxy = [{
+                        forceTls: "same",
+                        dest: window.location.hostname,
+                        port: inModal.inbound.port,
+                        remark: ""
+                    }];
+                } else {
+                    inModal.inbound.stream.externalProxy = [];
+                }
+            }
+        },
+
+        watch: {
+            'inModal.inbound.stream.security'(newVal, oldVal) {
+                // 当安全设置从 reality/tls 更改为 none 时清除 flow
+                if (inModal.inbound.protocol == Protocols.VLESS && !inModal.inbound.canEnableTlsFlow()) {
+                    inModal.inbound.settings.vlesses.forEach(client => {
+                        client.flow = "";
+                    });
+                }
+            },
+            // 确保启用 vision 流时始终初始化 testseed
+            'inModal.inbound.settings.vlesses': {
+                handler() {
+                    if (inModal.inbound.protocol === Protocols.VLESS && inModal.inbound.settings && inModal.inbound.settings.vlesses) {
+                        const hasVisionFlow = inModal.inbound.settings.vlesses.some(c => c.flow === 'xtls-rprx-vision' || c.flow === 'xtls-rprx-vision-udp443');
+                        if (hasVisionFlow && (!inModal.inbound.settings.testseed || !Array.isArray(inModal.inbound.settings.testseed) || inModal.inbound.settings.testseed.length < 4)) {
+                            inModal.inbound.settings.testseed = [900, 500, 900, 256];
+                        }
+                    }
+                },
+                deep: true
+            }
+        },
+
+        methods: {
+            streamNetworkChange() {
+                if (!inModal.inbound.canEnableTls()) {
+                    this.inModal.inbound.stream.security = 'none';
+                }
+                if (!inModal.inbound.canEnableReality()) {
+                    this.inModal.inbound.reality = false;
+                }
+                if (this.inModal.inbound.protocol == Protocols.VLESS && !inModal.inbound.canEnableTlsFlow()) {
+                    this.inModal.inbound.settings.vlesses.forEach(client => {
+                        client.flow = "";
+                    });
+                }
+            },
+            SSMethodChange() {
+                this.inModal.inbound.settings.password = RandomUtil.randomShadowsocksPassword(this.inModal.inbound.settings.method)
+
+                if (this.inModal.inbound.isSSMultiUser) {
+                    if (this.inModal.inbound.settings.shadowsockses.length == 0) {
+                        this.inModal.inbound.settings.shadowsockses = [new Inbound.ShadowsocksSettings.Shadowsocks()];
+                    }
+                    if (!this.inModal.inbound.isSS2022) {
+                        this.inModal.inbound.settings.shadowsockses.forEach(client => {
+                            client.method = this.inModal.inbound.settings.method;
+                        })
+                    } else {
+                        this.inModal.inbound.settings.shadowsockses.forEach(client => {
+                            client.method = "";
+                        })
+                    }
+                    this.inModal.inbound.settings.shadowsockses.forEach(client => {
+                        client.password = RandomUtil.randomShadowsocksPassword(this.inModal.inbound.settings.method)
+                    })
+                } else {
+                    if (this.inModal.inbound.settings.shadowsockses.length > 0) {
+                        this.inModal.inbound.settings.shadowsockses = [];
+                    }
+                }
+            },
+            setDefaultCertData(index) {
+                inModal.inbound.stream.tls.certs[index].certFile = app.defaultCert;
+                inModal.inbound.stream.tls.certs[index].keyFile = app.defaultKey;
+            },
+            async getNewX25519Cert() {
+                inModal.loading(true);
+                const msg = await HttpUtil.get('/panel/api/server/getNewX25519Cert');
+                inModal.loading(false);
+                if (!msg.success) {
+                    return;
+                }
+                inModal.inbound.stream.reality.privateKey = msg.obj.privateKey;
+                inModal.inbound.stream.reality.settings.publicKey = msg.obj.publicKey;
+            },
+            async getNewmldsa65() {
+                inModal.loading(true);
+                const msg = await HttpUtil.get('/panel/api/server/getNewmldsa65');
+                inModal.loading(false);
+                if (!msg.success) {
+                    return;
+                }
+                inModal.inbound.stream.reality.mldsa65Seed = msg.obj.seed;
+                inModal.inbound.stream.reality.settings.mldsa65Verify = msg.obj.verify;
+            },
+            async getNewEchCert() {
+                inModal.loading(true);
+                const msg = await HttpUtil.post('/panel/api/server/getNewEchCert', { sni: inModal.inbound.stream.tls.sni });
+                inModal.loading(false);
+                if (!msg.success) {
+                    return;
+                }
+                inModal.inbound.stream.tls.echServerKeys = msg.obj.echServerKeys;
+                inModal.inbound.stream.tls.settings.echConfigList = msg.obj.echConfigList;
+            },
+            async getNewVlessEnc() {
+                inModal.loading(true);
+                const msg = await HttpUtil.get('/panel/api/server/getNewVlessEnc');
+                inModal.loading(false);
+
+                if (!msg.success) {
+                    return;
+                }
+
+                const auths = msg.obj.auths || [];
+                const selected = inModal.inbound.settings.selectedAuth;
+                const block = auths.find(a => a.label === selected);
+
+                if (!block) {
+                    console.error("No auth block for", selected);
+                    return;
+                }
+
+                inModal.inbound.settings.decryption = block.decryption;
+                inModal.inbound.settings.encryption = block.encryption;
+            },
+            clearKeys() {
+                this.inbound.settings.decryption = 'none';
+                this.inbound.settings.encryption = '';
+            },
+
+            // Vision Seed 方法 - 必须在 Vue methods 中以进行正确的绑定
+            updateTestseed(index, value) {
+                if (!this.inbound.settings.testseed || !Array.isArray(this.inbound.settings.testseed)) {
+                    this.$set(this.inbound.settings, 'testseed', [900, 500, 900, 256]);
+                }
+                while (this.inbound.settings.testseed.length <= index) {
+                    this.inbound.settings.testseed.push(0);
+                }
+                this.$set(this.inbound.settings.testseed, index, value);
+            },
+
+            /**
+             * 优化后的随机 Vision Seed 生成函数 (Vue 实例版)
+             */
+            setRandomTestseed() {
+                // 确保对象存在
+                if (!this.inbound || !this.inbound.settings) return;
+
+                // 1. 生成 [0] 大包阈值
+                // 建议范围：500 - 1000 (避免太小导致所有包都被当做大包)
+                let threshold = 500 + Math.floor(Math.random() * 501);
+
+                // 2. 生成 [1] 大包浮动
+                // 建议范围：0 - 500
+                let largeVar = Math.floor(Math.random() * 501);
+
+                // 3. 生成 [2] 大包目标最低长度
+                // 逻辑：必须 >= threshold。在 threshold 基础上增加 0-200 的随机量
+                // 这样永远保证 seed[2] >= seed[0]，避免内核逻辑崩溃
+                let targetLength = threshold + Math.floor(Math.random() * 201);
+
+                // 4. 生成 [3] 小包浮动
+                // 建议范围：0 - 300
+                let smallVar = Math.floor(Math.random() * 301);
+
+                // 使用 Vue.set 确保 UI 响应式更新
+                this.$set(this.inbound.settings, 'testseed', [threshold, largeVar, targetLength, smallVar]);
+            },
+
+            resetTestseed() {
+                // 使用 Vue.set 重置为默认值
+                this.$set(this.inbound.settings, 'testseed', [900, 500, 900, 256]);
+            },
+
+            // [已解锁] Reality 域名随机更换
+            setRandomRealityDomain() {
+                const domains = [
+                    { target: 'www.microsoft.com:443', sni: 'www.microsoft.com' },
+                    { target: 'www.lovelive-anime.jp:443', sni: 'www.lovelive-anime.jp' },
+                    { target: 'www.apple.com:443', sni: 'www.apple.com' },
+                    { target: 'www.google.com:443', sni: 'www.google.com' },
+                    { target: 'www.tesla.com:443', sni: 'www.tesla.com' },
+                    { target: 'www.nvidia.com:443', sni: 'www.nvidia.com' },
+                    { target: 'www.youtube.com:443', sni: 'www.youtube.com' },
+                    { target: 'www.netflix.com:443', sni: 'www.netflix.com' },
+                    { target: 'www.amazon.com:443', sni: 'www.amazon.com' },
+                    { target: 'www.cloudflare.com:443', sni: 'www.cloudflare.com' }
+                ];
+                const random = domains[Math.floor(Math.random() * domains.length)];
+                this.inbound.stream.reality.target = random.target;
+                this.inbound.stream.reality.serverNames = random.sni;
+                this.$message.success('已随机更换域名为: ' + random.sni);
+            }
+
+        },
+    });
+
+</script>
+{{end}}
