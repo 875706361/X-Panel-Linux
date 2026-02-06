@@ -1992,57 +1992,6 @@ func (t *Tgbot) answerCallback(callbackQuery *telego.CallbackQuery, isAdmin bool
 			t.editMessageTgBot(chatId, callbackQuery.Message.GetMessageID(), "您选择不参与本次游戏，祝您一天愉快！")
 			return // 〔中文注释〕: 处理完毕，直接返回。	
 
-	 // 【新增代码】: 在这里处理新按钮的回调
-	 case "oneclick_options":
-		 t.deleteMessageTgBot(chatId, callbackQuery.Message.GetMessageID())
-		 t.sendCallbackAnswerTgBot(callbackQuery.ID, "请选择配置类型...")
-		 // [已解锁] 发送一键配置选项菜单
-		 inlineKeyboard := tu.InlineKeyboard(
-		 	tu.InlineKeyboardRow(
-		 		tu.InlineKeyboardButton("🚀 Reality + Vision").WithCallbackData(t.encodeQuery("oneclick_reality")),
-		 	),
-		 	tu.InlineKeyboardRow(
-		 		tu.InlineKeyboardButton("⚡ XHTTP + Reality").WithCallbackData(t.encodeQuery("oneclick_xhttp_reality")),
-		 	),
-		 	tu.InlineKeyboardRow(
-		 		tu.InlineKeyboardButton("🛡️ XHTTP + TLS").WithCallbackData(t.encodeQuery("oneclick_tls")),
-		 	),
-		 )
-		 t.SendMsgToTgbot(chatId, "🎯 请选择您要一键配置的协议类型：", inlineKeyboard)
-
-
-	 case "oneclick_reality":
-		 t.deleteMessageTgBot(chatId, callbackQuery.Message.GetMessageID())
-		 t.sendCallbackAnswerTgBot(callbackQuery.ID, "正在配置 Reality...")
-		 t.SendMsgToTgbot(chatId, "⏳ 正在为您一键配置 [Reality + Vision] 协议，请稍候...")
-		 err := t.inboundService.CreateOneClickConfig("reality")
-		 if err != nil {
-			 t.SendMsgToTgbot(chatId, "❌ 配置失败: "+err.Error())
-		 } else {
-			 t.SendMsgToTgbot(chatId, "✅ [Reality + Vision] 配置成功！您可以在面板后台查看并获取链接。")
-		 }
-
-	 case "oneclick_xhttp_reality":
-		 t.deleteMessageTgBot(chatId, callbackQuery.Message.GetMessageID())
-		 t.sendCallbackAnswerTgBot(callbackQuery.ID, "正在配置 XHTTP + Reality...")
-		 t.SendMsgToTgbot(chatId, "⏳ 正在为您一键配置 [XHTTP + Reality] 协议，请稍候...")
-		 err := t.inboundService.CreateOneClickConfig("xhttp_reality")
-		 if err != nil {
-			 t.SendMsgToTgbot(chatId, "❌ 配置失败: "+err.Error())
-		 } else {
-			 t.SendMsgToTgbot(chatId, "✅ [XHTTP + Reality] 配置成功！您可以在面板后台查看并获取链接。")
-		 }
-
-	 case "oneclick_tls":
-		 t.deleteMessageTgBot(chatId, callbackQuery.Message.GetMessageID())
-		 t.sendCallbackAnswerTgBot(callbackQuery.ID, "正在配置 XHTTP + TLS...")
-		 t.SendMsgToTgbot(chatId, "⏳ 正在为您一键配置 [XHTTP + TLS] 协议，请稍候...")
-		 err := t.inboundService.CreateOneClickConfig("tls")
-		 if err != nil {
-			 t.SendMsgToTgbot(chatId, "❌ 配置失败: "+err.Error())
-		 } else {
-			 t.SendMsgToTgbot(chatId, "✅ [XHTTP + TLS] 配置成功！您可以在面板后台查看并获取链接。")
-		 }
 
 	 case "subconverter_install":
 		 t.deleteMessageTgBot(chatId, callbackQuery.Message.GetMessageID())
@@ -2304,9 +2253,7 @@ func (t *Tgbot) SendAnswer(chatId int64, msg string, isAdmin bool) {
 			tu.InlineKeyboardButton(t.I18nBot("tgbot.buttons.allClients")).WithCallbackData(t.encodeQuery("get_inbounds")),
 			tu.InlineKeyboardButton(t.I18nBot("tgbot.buttons.addClient")).WithCallbackData(t.encodeQuery("add_client")),
 		),
-		// 【一键配置】和【订阅转换】按钮的回调数据
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton(t.I18nBot("tgbot.buttons.oneClick")).WithCallbackData(t.encodeQuery("oneclick_options")),
 			tu.InlineKeyboardButton(t.I18nBot("tgbot.buttons.subconverter")).WithCallbackData(t.encodeQuery("subconverter_install")),
 		),
 		// 〔中文注释〕: 【新增功能行】 - 添加娱乐抽奖和VPS推荐按钮
@@ -2321,9 +2268,7 @@ func (t *Tgbot) SendAnswer(chatId int64, msg string, isAdmin bool) {
 			tu.InlineKeyboardButton(t.I18nBot("tgbot.buttons.clientUsage")).WithCallbackData(t.encodeQuery("client_traffic")),
 			tu.InlineKeyboardButton(t.I18nBot("tgbot.buttons.commands")).WithCallbackData(t.encodeQuery("client_commands")),
 		),
-		// [已解锁] 为普通用户提供一键配置和订阅转换按钮
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton(t.I18nBot("tgbot.buttons.oneClick")).WithCallbackData(t.encodeQuery("oneclick_options")),
 			tu.InlineKeyboardButton(t.I18nBot("tgbot.buttons.subconverter")).WithCallbackData(t.encodeQuery("subconverter_install")),
 		),
 	)

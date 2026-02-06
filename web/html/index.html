@@ -868,19 +868,10 @@
                 <ul style="color: #666; font-size: 13px; padding-left: 20px;">
                     <li>数据快照与远程急救还原</li>
                     <li>多主题动态流光 UI</li>
-                    <li>一键配置方案与多面板管理</li>
+                    <li>多面板远程管理</li>
                     <li>深度系统调优与高级协议支持</li>
                 </ul>
 
-                <a-divider style="margin: 10px 0;"></a-divider>
-
-                <div style="font-size: 14px;">
-                    <a-icon type="rocket" style="margin-right: 5px;"></a-icon>
-                    〔X-Panel-Pro 面板〕功能概览：
-                    <a @click="jumpToProFeatures" style="font-weight: bold; color: #722ed1;">
-                        点击查看 <a-icon type="right"></a-icon>
-                    </a>
-                </div>
             </div>
 
             <a-button type="primary" shape="round" size="large" block @click="closeWelcomeModal"
@@ -1293,14 +1284,6 @@ ${dateTime}
                 sessionStorage.setItem('welcomeShown', 'true');
             },
 
-            // 2. 跳转到 navigation 页面 (尝试定位到第3个选项卡)
-            jumpToProFeatures() {
-                this.closeWelcomeModal(); // 先关闭弹窗
-                // 根据 Sidebar 逻辑拼接路径
-                // 注意：这里默认跳转到 navigation 页面。
-                // 如果 navigation 页面支持 ?tab=3 这种参数请保留参数，不支持则只会跳转到默认页
-                window.location.href = '{{ .base_path }}panel/navigation?tab=3';
-            },
 
             // 按钮 2 触发的方法：执行导入数据库 (已解锁)
             async performRemoteRestore() {

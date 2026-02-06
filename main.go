@@ -58,9 +58,11 @@ func runWebServer() {
 	xrayService := service.XrayService{}
 	settingService := service.SettingService{}
 	serverService := service.ServerService{}
-	// 还需要 InboundService 等，按需添加
 	inboundService := service.InboundService{}
 	lastStatus := service.Status{}
+
+	// 〔中文注释〕: 在面板启动时执行数据库迁移和修复逻辑
+	inboundService.MigrateDB()
 
 	// 创建 Xray API 实例
 	xrayApi := xray.XrayAPI{}

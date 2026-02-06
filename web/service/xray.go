@@ -389,7 +389,13 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 			if realitySettings, ok := stream["realitySettings"].(map[string]interface{}); ok {
 				if panelSettings, ok := realitySettings["settings"].(map[string]interface{}); ok {
 					for k, v := range panelSettings {
-						realitySettings[k] = v
+						// 中文注释: 只有当 settings 中的值不为空时，才覆盖根节点的值。
+						// 这样可以防止导入旧数据库时，空的 settings.publicKey 覆盖掉根节点的有效值。
+						if valStr, isStr := v.(string); isStr && valStr != "" {
+							realitySettings[k] = v
+						} else if !isStr && v != nil {
+							realitySettings[k] = v
+						}
 					}
 				}
 				delete(realitySettings, "settings")

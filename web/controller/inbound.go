@@ -45,7 +45,6 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 	g.POST("/onlines", a.onlines)
 	g.POST("/lastOnline", a.lastOnline)
 	g.POST("/updateClientTraffic/:email", a.updateClientTraffic)
-	g.POST("/createOneClick", a.createOneClick)
 }
 
 func (a *InboundController) getInbounds(c *gin.Context) {
@@ -373,24 +372,4 @@ func (a *InboundController) updateClientTraffic(c *gin.Context) {
 	}
 
 	jsonMsg(c, I18nWeb(c, "pages.inbounds.toasts.inboundClientUpdateSuccess"), nil)
-}
-
-// [已解锁] 一键创建配置接口
-func (a *InboundController) createOneClick(c *gin.Context) {
-	type OneClickRequest struct {
-		Type string `json:"type"`
-	}
-	var req OneClickRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		jsonMsg(c, "参数错误", err)
-		return
-	}
-
-	err := a.inboundService.CreateOneClickConfig(req.Type)
-	if err != nil {
-		jsonMsg(c, "创建失败", err)
-		return
-	}
-
-	jsonMsg(c, "一键创建成功", nil)
 }

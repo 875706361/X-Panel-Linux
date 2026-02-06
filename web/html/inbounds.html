@@ -334,9 +334,6 @@
                         </a-menu-item>
                       </a-menu>
                     </a-dropdown>
-                    <a-button type="primary" icon="thunderbolt" @click="openOneClickConfig">
-                      <template v-if="!isMobile">{{ i18n "pages.inbounds.oneClickConfig" }}</template>
-                    </a-button>
                     <a-button type="primary" icon="link" @click="handleSubscriptionConversion">
                       <template v-if="!isMobile">{{ i18n "pages.inbounds.is_subConversion" }}</template>
                     </a-button>
@@ -797,28 +794,6 @@
           </a-row>
         </transition>
       </a-spin>
-      <a-modal :title="`{{ i18n " pages.inbounds.oneClick.title" }}`" :visible="oneClickModalVisible"
-        :cancel-text="`{{ i18n " cancel" }}`" :class="themeSwitcher.currentTheme" @cancel="handleOneClickCancel"
-        :footer="null">
-        <a-alert message="一键配置" type="success" show-icon>
-          <template #description>
-            选择下方协议类型，即可快速创建节点配置。
-          </template>
-          <template #icon><a-icon type="rocket"></a-icon></template>
-        </a-alert>
-        <div :style="{ marginTop: '20px' }">
-          <a-button type="primary" block @click="createOneClickConfig('reality')" :style="{ marginBottom: '10px' }">
-            🚀 Vless + Reality + Vision
-          </a-button>
-          <a-button type="primary" block @click="createOneClickConfig('xhttp_reality')"
-            :style="{ marginBottom: '10px' }">
-            ⚡ Vless + XHTTP + Reality
-          </a-button>
-          <a-button type="primary" block @click="createOneClickConfig('tls')">
-            🛡️ Vless + XHTTP + TLS
-          </a-button>
-        </div>
-      </a-modal>
     </a-layout-content>
   </a-layout>
 </a-layout>
@@ -983,9 +958,6 @@
       showAlert: false,
       ipLimitEnable: false,
       pageSize: 50,
-
-      // 【中文注释】: 新增数据属性，用于控制“一键配置”模态框的显示状态
-      oneClickModalVisible: false,
     },
 
     mounted() {
@@ -1222,39 +1194,6 @@
       },
 
 
-      // 【中文注释】: 以下是新增和修改后的方法，用于处理“一键配置”和“订阅转换”
-      // 【中文注释】: 打开“一键配置”模态框
-      openOneClickConfig() {
-        this.oneClickModalVisible = true;
-      },
-
-      // 【中文注释】: 处理“一键配置”模态框的取消操作
-      handleOneClickCancel() {
-        this.oneClickModalVisible = false;
-        this.inboundLink = '';          // 关闭时清空链接，以便下次重新打开时显示选项
-      },
-
-      // [已解锁] 创建一键配置
-      async createOneClickConfig(configType) {
-        this.oneClickModalVisible = false;
-        const loadingMessage = this.$message.loading('正在创建 ' + configType + ' 配置，请稍候...', 0);
-
-        try {
-          const msg = await HttpUtil.post('/panel/api/inbounds/createOneClick', { type: configType });
-
-          if (msg.success) {
-            this.$message.success(configType + ' 配置创建成功！');
-            await this.getDBInbounds();
-          } else {
-            this.$message.error('配置创建失败: ' + (msg.msg || '未知错误'));
-          }
-        } catch (err) {
-          console.error('创建一键配置失败:', err);
-          this.$message.error('创建配置失败: ' + err.message);
-        } finally {
-          loadingMessage();
-        }
-      },
 
       // 〔中文注释〕: 处理“订阅转换”按钮的点击事件 (已更新为完整逻辑)
       handleSubscriptionConversion() {
