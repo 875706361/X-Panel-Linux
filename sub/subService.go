@@ -425,7 +425,7 @@ func (s *SubService) genVlessLink(inbound *model.Inbound, email string) string {
 	if security == "reality" {
 		params["security"] = "reality"
 		realitySetting, _ := stream["realitySettings"].(map[string]any)
-		realitySettings, _ := searchKey(realitySetting, "settings")
+		realitySettings := realitySetting
 		if realitySetting != nil {
 			if sniValue, ok := searchKey(realitySetting, "serverNames"); ok {
 				sNames, _ := sniValue.([]any)

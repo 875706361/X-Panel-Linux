@@ -2218,6 +2218,53 @@ func (s *InboundService) MigrationRequirements() {
 			inbounds[inbound_index].Settings = string(modifiedSettings)
 		}
 
+		// Fix Reality settings structure
+		var streamSettings map[string]any
+		err = json.Unmarshal([]byte(inbounds[inbound_index].StreamSettings), &streamSettings)
+		if err == nil {
+			if security, ok := streamSettings["security"].(string); ok && security == "reality" {
+				if rs, ok := streamSettings["realitySettings"].(map[string]any); ok {
+					changed := false
+					rsSettings, hasSettings := rs["settings"].(map[string]any)
+					if !hasSettings {
+						rsSettings = make(map[string]any)
+					}
+
+					// Move keys from root to settings if they exist at root
+					keysToMove := []string{"publicKey", "fingerprint", "serverName", "spiderX", "mldsa65Verify"}
+					for _, key := range keysToMove {
+						if val, ok := rs[key]; ok {
+							if _, exists := rsSettings[key]; !exists {
+								rsSettings[key] = val
+								delete(rs, key)
+								changed = true
+							}
+						}
+					}
+
+					// If publicKey is still empty but privateKey exists, try to generate it
+					if pub, ok := rsSettings["publicKey"].(string); !ok || pub == "" {
+						if priv, ok := rs["privateKey"].(string); ok && priv != "" {
+							// Try to generate public key from private key using xray x25519
+							// Note: Usually we need to feed the private key to some command, 
+							// but xray x25519 doesn't take input easily to derive.
+							// However, many users might just have a broken import.
+							// For now, if it's missing, we at least ensure the structure is there.
+							// If we can't derive it, the user will see it's empty and can regenerate.
+						}
+					}
+
+					if changed || !hasSettings {
+						rs["settings"] = rsSettings
+						modifiedStream, err := json.MarshalIndent(streamSettings, "", "  ")
+						if err == nil {
+							inbounds[inbound_index].StreamSettings = string(modifiedStream)
+						}
+					}
+				}
+			}
+		}
+
 		// Add client traffic row for all clients which has email
 		modelClients, err := s.GetClients(inbounds[inbound_index])
 		if err != nil {
@@ -2381,8 +2428,12 @@ func (s *InboundService) CreateOneClickConfig(configType string) error {
 				"xver": 0,
 				"serverNames": [ "www.microsoft.com" ],
 				"privateKey": "",
-				"publicKey": "",
-				"shortIds": [ "6f2c7d8a", "" ]
+				"shortIds": [ "6f2c7d8a", "" ],
+				"settings": {
+					"publicKey": "",
+					"fingerprint": "chrome",
+					"spiderX": "/"
+				}
 			},
 			"tcpSettings": {
 				"header": { "type": "none" }
@@ -2408,8 +2459,12 @@ func (s *InboundService) CreateOneClickConfig(configType string) error {
 				"xver": 0,
 				"serverNames": [ "www.apple.com" ],
 				"privateKey": "",
-				"publicKey": "",
-				"shortIds": [ "8b2c9d0a", "" ]
+				"shortIds": [ "8b2c9d0a", "" ],
+				"settings": {
+					"publicKey": "",
+					"fingerprint": "chrome",
+					"spiderX": "/"
+				}
 			},
 			"xhttpSettings": {
 				"path": "/oneclick",

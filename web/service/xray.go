@@ -379,9 +379,19 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 			}
 
 			if tlsSettings, ok := stream["tlsSettings"].(map[string]interface{}); ok {
+				if panelSettings, ok := tlsSettings["settings"].(map[string]interface{}); ok {
+					for k, v := range panelSettings {
+						tlsSettings[k] = v
+					}
+				}
 				delete(tlsSettings, "settings")
 			}
 			if realitySettings, ok := stream["realitySettings"].(map[string]interface{}); ok {
+				if panelSettings, ok := realitySettings["settings"].(map[string]interface{}); ok {
+					for k, v := range panelSettings {
+						realitySettings[k] = v
+					}
+				}
 				delete(realitySettings, "settings")
 			}
 			delete(stream, "externalProxy")
