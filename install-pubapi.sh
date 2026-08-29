@@ -61,6 +61,27 @@ echo "--- 4. 替换并启动 ---"
 mkdir -p "$INSTALL_DIR"
 cp "$TMP/x-ui-new" "$BIN"
 chmod +x "$BIN"
+
+# 从 release 包补齐 bin/ (xray 核心 + geoip/geosite/config.json)
+if [ ! -f "$INSTALL_DIR/bin/xray-linux-amd64" ]; then
+    echo "--- 补齐 xray 核心 (bin/) ---"
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64) REL="x-ui-linux-amd64.tar.gz" ;;
+        aarch64|arm64) REL="x-ui-linux-arm64.tar.gz" ;;
+        *) echo "不支持的架构: $ARCH，请从 release 手动补齐 bin/"; REL="" ;;
+    esac
+    if [ -n "$REL" ]; then
+        ASSET_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/releases/latest" | grep -oE "\"id\":[0-9]+,\"name\":\"$REL\"" | grep -oE '[0-9]+' | head -1)
+        curl -sL -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
+            "https://api.github.com/repos/$REPO/releases/assets/$ASSET_ID" -o "$TMP/rel.tar.gz"
+        tar xzf "$TMP/rel.tar.gz" -C "$TMP"
+        mkdir -p "$INSTALL_DIR/bin"
+        cp -r "$TMP"/x-ui/bin/. "$INSTALL_DIR/bin/"
+        chmod +x "$INSTALL_DIR/bin/"xray-linux-*
+        echo "bin/ 已补齐"
+    fi
+fi
 systemctl daemon-reload 2>/dev/null || true
 systemctl start "$SVC" 2>/dev/null || service "$SVC" start 2>/dev/null || true
 sleep 2
