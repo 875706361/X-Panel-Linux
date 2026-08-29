@@ -45,6 +45,7 @@ if [ -f "$BIN" ]; then
 fi
 
 echo "--- 4. 替换并启动 ---"
+mkdir -p "$INSTALL_DIR"
 cp "$TMP/x-ui-new" "$BIN"
 chmod +x "$BIN"
 systemctl daemon-reload 2>/dev/null || true
