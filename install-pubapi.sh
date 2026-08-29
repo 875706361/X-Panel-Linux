@@ -28,6 +28,19 @@ need_go() {
     export PATH=/usr/local/go/bin:$PATH
 }
 
+# sqlite 驱动需要 cgo，必须装 gcc
+if ! command -v gcc >/dev/null 2>&1; then
+    echo "--- 安装 gcc (sqlite 需要 cgo) ---"
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update -qq && apt-get install -y -qq gcc >/dev/null 2>&1
+    elif command -v yum >/dev/null 2>&1; then
+        yum install -y -q gcc >/dev/null 2>&1
+    elif command -v dnf >/dev/null 2>&1; then
+        dnf install -y -q gcc >/dev/null 2>&1
+    fi
+fi
+export CGO_ENABLED=1
+
 need_go
 
 echo "--- 1. 拉取源码 (${REPO}@${BRANCH}) ---"
