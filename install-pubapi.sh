@@ -72,7 +72,13 @@ if [ ! -f "$INSTALL_DIR/bin/xray-linux-amd64" ]; then
         *) echo "不支持的架构: $ARCH，请从 release 手动补齐 bin/"; REL="" ;;
     esac
     if [ -n "$REL" ]; then
-        ASSET_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/releases/latest" | grep -oE "\"id\":[0-9]+,\"name\":\"$REL\"" | grep -oE '[0-9]+' | head -1)
+        ASSET_ID=$(curl -s -H "Authorization: token $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/releases/latest" | python3 -c "
+import json,sys
+try:
+    d=json.load(sys.stdin)
+    for a in d.get('assets',[]):
+        if a['name']=='$REL': print(a['id']); break
+except Exception: pass")
         curl -sL -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
             "https://api.github.com/repos/$REPO/releases/assets/$ASSET_ID" -o "$TMP/rel.tar.gz"
         tar xzf "$TMP/rel.tar.gz" -C "$TMP"
