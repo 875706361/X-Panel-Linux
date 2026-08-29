@@ -37,4 +37,4 @@ x-ui.db
 docker-compose.override.yml
 
 # Ignore .env (Environment Variables) file
-.env
+.envx-panel-new-pubapi
