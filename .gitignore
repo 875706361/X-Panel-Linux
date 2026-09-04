@@ -38,3 +38,7 @@ docker-compose.override.yml
 
 # Ignore .env (Environment Variables) file
 .envx-panel-new-pubapi
+
+web/assets/*.apk
+app/build/
+app/src/main/jniLibs/*/*.so

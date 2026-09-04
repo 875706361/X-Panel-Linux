@@ -35,6 +35,8 @@ func NewIndexController(g *gin.RouterGroup) *IndexController {
 
 func (a *IndexController) initRouter(g *gin.RouterGroup) {
 	g.GET("/", a.index)
+	g.GET("/download/xpanel.apk", a.downloadApk)
+	g.GET("/download/xpanel-v2.apk", a.downloadApk)
 	g.POST("/login", a.login)
 	g.GET("/logout", a.logout)
 	g.POST("/getTwoFactorEnable", a.getTwoFactorEnable)
@@ -112,4 +114,11 @@ func (a *IndexController) getTwoFactorEnable(c *gin.Context) {
 	if err == nil {
 		jsonObj(c, status, nil)
 	}
+}
+
+func (a *IndexController) downloadApk(c *gin.Context) {
+	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+	c.FileAttachment("/root/xpanel-client.apk", "xpanel-client-v2.apk")
 }

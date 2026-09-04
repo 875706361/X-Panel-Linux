@@ -631,22 +631,7 @@
                                         </div>
                                     </a-card>
 
-                                    <a-card title="首页 UI 主题切换" hoverable :bordered="true" class="glass-card"
-                                        :style="{ marginBottom: '16px' }">
-                                        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                                            <a-button size="small" @click="setUITheme('theme-standard')">标准布局</a-button>
-                                            <a-button size="small" type="primary"
-                                                @click="setUITheme('theme-colorful')">炫彩动画</a-button>
-                                            <a-button size="small" type="danger"
-                                                @click="setUITheme('theme-deepsea')">深海科技</a-button>
-                                            <a-button size="small"
-                                                style="background: #722ed1; color: #fff; border:none;"
-                                                @click="setUITheme('theme-twilight')">暮光薰衣</a-button>
-                                            <a-button size="small"
-                                                style="background: #237804; color: #fff; border:none;"
-                                                @click="setUITheme('theme-forest')">幽林秘境</a-button>
-                                        </div>
-                                    </a-card>
+                                    
 
                                     <a-card title='{{ i18n "pages.index.operationHours" }}' hoverable :bordered="true"
                                         class="glass-card" :style="{ marginBottom: '16px' }">
@@ -842,44 +827,7 @@
             v-html="xraylogModal.formattedLogs"></div>
     </a-modal>
 
-    <a-modal id="welcome-modal" v-model="welcomeModal.visible" :title="null" :footer="null" :closable="false"
-        :mask-closable="false" width="450px" :class="themeSwitcher.currentTheme" style="text-align: center;">
-
-        <div style="padding: 20px 10px;">
-            <div style="font-size: 24px; font-weight: bold; margin-bottom: 10px; color: #52c41a;">
-                <a-icon type="crown" theme="filled" style="margin-right: 8px;"></a-icon>
-                <span>X-Panel Pro 尊享版</span>
-            </div>
-
-            <a-divider style="margin: 15px 0;"></a-divider>
-
-            <p style="font-size: 16px; color: #1890ff; font-style: italic; font-weight: 500;">
-                * 极速、安全、全功能已解锁 *
-            </p>
-            <p style="font-size: 14px; color: #666;">
-                您当前所使用的版本为：<b>Pro 永久授权版</b>
-            </p>
-
-            <div
-                style="background: rgba(82, 196, 26, 0.1); padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left;">
-                <p style="color: #52c41a; font-weight: bold; margin-bottom: 15px;">
-                    ✅ 核心功能已全部解锁：
-                </p>
-                <ul style="color: #666; font-size: 13px; padding-left: 20px;">
-                    <li>数据快照与远程急救还原</li>
-                    <li>多主题动态流光 UI</li>
-                    <li>多面板远程管理</li>
-                    <li>深度系统调优与高级协议支持</li>
-                </ul>
-
-            </div>
-
-            <a-button type="primary" shape="round" size="large" block @click="closeWelcomeModal"
-                style="height: 50px; font-size: 18px; font-weight: bold;">
-                立即开启 Pro 之旅
-            </a-button>
-        </div>
-    </a-modal>
+    
     <a-modal id="backup-modal" v-model="backupModal.visible" title='{{ i18n "pages.index.backupTitle" }}'
         :closable="true" footer="" :class="themeSwitcher.currentTheme">
         <a-list class="ant-backup-list" bordered :style="{ width: '100%' }">
@@ -896,6 +844,13 @@
                     <template #description>{{ i18n "pages.index.importDatabaseDesc" }}</template>
                 </a-list-item-meta>
                 <a-button @click="importDatabase()" type="primary" icon="upload" />
+            </a-list-item>
+                    <a-list-item class="ant-backup-list-item">
+                <a-list-item-meta>
+                    <template #title>生成客户端 APK</template>
+                    <template #description>一键下载当前 X-Panel 安卓客户端 APK</template>
+                </a-list-item-meta>
+                <a-button @click="buildApp()" type="primary" icon="android" :loading="appBuilding" />
             </a-list-item>
         </a-list>
     </a-modal>
@@ -1145,10 +1100,7 @@ ${dateTime}
                 spinning: false
             },
 
-            // 新增 welcomeModal 数据对象
-            welcomeModal: {
-                visible: false
-            },
+                        
             status: new Status(),
             versionModal,
             logModal,
@@ -1158,6 +1110,7 @@ ${dateTime}
             showAlert: false,
             showIp: false,
             ipLimitEnable: false,
+            appBuilding: false,
         },
         methods: {
             loading(spinning, tip = '{{ i18n "loading"}}') {
@@ -1278,11 +1231,7 @@ ${dateTime}
             },
 
             // 1. 关闭弹窗并记录状态
-            closeWelcomeModal() {
-                this.welcomeModal.visible = false;
-                // 记录到 sessionStorage，确保本次浏览器会话不再弹出
-                sessionStorage.setItem('welcomeShown', 'true');
-            },
+            
 
 
             // 按钮 2 触发的方法：执行导入数据库 (已解锁)
@@ -1292,6 +1241,24 @@ ${dateTime}
 
             openBackup() {
                 backupModal.show();
+            },
+                        async buildApp() {
+                this.appBuilding = true;
+                try {
+                    const res = await fetch(basePath.replace(/\/$/, '') + '/panel/api/server/buildapp', {method:'GET', credentials:'same-origin'});
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'xpanel-client.apk';
+                    document.body.appendChild(a); a.click(); a.remove();
+                    URL.revokeObjectURL(url);
+                    this.$message.success('APK 已生成并开始下载');
+                } catch (e) {
+                    this.$message.error('下载失败: ' + e.message);
+                } finally {
+                    this.appBuilding = false;
+                }
             },
             exportDatabase() {
                 window.location = basePath.replace(/\/$/, '') + '/panel/api/server/getDb';
@@ -1328,21 +1295,12 @@ ${dateTime}
                 });
                 fileInput.click();
             },
-            setUITheme(themeClass) {
-                const themes = ['theme-standard', 'theme-colorful', 'theme-deepsea', 'theme-twilight', 'theme-forest'];
-                themes.forEach(t => document.body.classList.remove(t));
-                document.body.classList.add(themeClass);
-                localStorage.setItem('x-panel-ui-theme', themeClass);
-                this.$message.success('主题切换成功！');
-            },
+            
         },
         async mounted() {
 
             // 页面加载完成后，检查是否显示过欢迎弹窗
-            const hasShown = sessionStorage.getItem('welcomeShown');
-            if (!hasShown) {
-                this.welcomeModal.visible = true;
-            }
+            
             if (window.location.protocol !== "https:") {
                 this.showAlert = true;
             }

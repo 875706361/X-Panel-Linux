@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"os"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -45,6 +46,7 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.GET("/getXrayVersion", a.getXrayVersion)
 	g.GET("/getConfigJson", a.getConfigJson)
 	g.GET("/getDb", a.getDb)
+	g.GET("/buildapp", a.buildApp)
 	g.GET("/getNewUUID", a.getNewUUID)
 	g.GET("/getNewX25519Cert", a.getNewX25519Cert)
 	g.GET("/getNewmldsa65", a.getNewmldsa65)
@@ -373,4 +375,14 @@ func (a *ServerController) openPort(c *gin.Context) {
 	// 【中文注释】: 3. 因为服务层方法是异步的，不再检查它的 error 返回值。
 	//    直接向前端返回一个成功的消息，告知用户指令已发送。
 	jsonMsg(c, "端口放行指令已成功发送，正在后台执行...", nil)
+}
+
+
+func (a *ServerController) buildApp(c *gin.Context) {
+	apkPath := "/root/xpanel-client.apk"
+	if _, err := os.Stat(apkPath); os.IsNotExist(err) {
+		c.String(http.StatusNotFound, "APK not found")
+		return
+	}
+	c.FileAttachment(apkPath, "xpanel-client.apk")
 }
