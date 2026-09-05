@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -38,6 +40,7 @@ var (
 	procBeginPaint    = user32.NewProc("BeginPaint")
 	procEndPaint      = user32.NewProc("EndPaint")
 	procShowWindow    = user32.NewProc("ShowWindow")
+	procPostMessage   = user32.NewProc("PostMessageW")
 	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
 
 	gdi32            = windows.NewLazySystemDLL("gdi32.dll")
@@ -66,6 +69,8 @@ var (
 	xrayServer  *core.Instance
 	connected   bool
 	serverUUID  string
+	stateMu     sync.Mutex
+	busy        bool
 )
 
 const (
@@ -252,6 +257,15 @@ func parseVless(raw string) (uuid, address, port, sni, pbk, sid, flow string, er
 	if err != nil {
 		return "", "", "", "", "", "", "", err
 	}
+	if u.User == nil || u.User.Username() == "" || u.Hostname() == "" || u.Port() == "" {
+		return "", "", "", "", "", "", "", fmt.Errorf("missing uuid, host or port")
+	}
+	if _, err := strconv.Atoi(u.Port()); err != nil {
+		return "", "", "", "", "", "", "", fmt.Errorf("invalid port")
+	}
+	if u.Query().Get("security") != "reality" || u.Query().Get("pbk") == "" || u.Query().Get("sni") == "" {
+		return "", "", "", "", "", "", "", fmt.Errorf("缺少 Reality 参数")
+	}
 	return u.User.Username(), u.Hostname(), u.Port(), u.Query().Get("sni"), u.Query().Get("pbk"), u.Query().Get("sid"), u.Query().Get("flow"), nil
 }
 
@@ -307,11 +321,17 @@ func handleLogin() {
 }
 
 func toggleConnect() {
-	if connected {
-		stopProxy()
-	} else {
-		startProxy()
+	stateMu.Lock()
+	if busy {
+		stateMu.Unlock()
+		return
 	}
+	busy = true
+	stateMu.Unlock()
+	go func() {
+		defer func() { stateMu.Lock(); busy = false; stateMu.Unlock() }()
+		if connected { stopProxy() } else { startProxy() }
+	}()
 }
 
 func startProxy() {
