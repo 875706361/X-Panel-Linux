@@ -37,57 +37,67 @@ var (
 	procLoadIcon      = user32.NewProc("LoadIconW")
 	procBeginPaint    = user32.NewProc("BeginPaint")
 	procEndPaint      = user32.NewProc("EndPaint")
+	procShowWindow    = user32.NewProc("ShowWindow")
+	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
 
-	gdi32             = windows.NewLazySystemDLL("gdi32.dll")
-	procCreateFont    = gdi32.NewProc("CreateFontW")
-	procCreateSolid   = gdi32.NewProc("CreateSolidBrush")
-	procSetTextColor  = gdi32.NewProc("SetTextColor")
-	procSetBkColor    = gdi32.NewProc("SetBkColor")
-	procSetBkMode     = gdi32.NewProc("SetBkMode")
-	procRoundRect     = gdi32.NewProc("RoundRect")
-	procSelectObject  = gdi32.NewProc("SelectObject")
-	procCreatePen     = gdi32.NewProc("CreatePen")
+	gdi32            = windows.NewLazySystemDLL("gdi32.dll")
+	procCreateFont   = gdi32.NewProc("CreateFontW")
+	procCreateSolid  = gdi32.NewProc("CreateSolidBrush")
+	procSetTextColor = gdi32.NewProc("SetTextColor")
+	procSetBkColor   = gdi32.NewProc("SetBkColor")
+	procSetBkMode    = gdi32.NewProc("SetBkMode")
+	procRoundRect    = gdi32.NewProc("RoundRect")
+	procSelectObject = gdi32.NewProc("SelectObject")
+	procCreatePen    = gdi32.NewProc("CreatePen")
 
 	winInet         = windows.NewLazySystemDLL("wininet.dll")
 	procInternetSet = winInet.NewProc("InternetSetOptionW")
 
-	hwndMain, hwndEdit, hwndBtn, hwndStatus, hwndTraffic, hwndDetail windows.HWND
-	hFontTitle, hFontSub, hFontEdit, hFontBtn, hFontStat, hFontVal uintptr
-	hBrushBg, hBrushCard, hBrushInput, hPenBorder, hPenCard, hPenBtn, hBrushBtn windows.Handle
+	hwndMain windows.HWND
+	// Page 1 (Input/Login)
+	hwndPage1Title, hwndPage1Sub, hwndEdit, hwndBtnLogin, hwndLoginTip windows.HWND
+	// Page 2 (Main Dashboard)
+	hwndPage2Title, hwndBtnBack, hwndBtnConnect, hwndStatus, hwndTraffic, hwndDetail windows.HWND
 
-	xrayServer *core.Instance
-	connected  bool
-	serverUUID string
+	hFontTitle, hFontSub, hFontEdit, hFontBtn, hFontStat, hFontVal uintptr
+	hBrushBg, hBrushCard, hBrushInput, hPenCard windows.Handle
+
+	currentPage = 1 // 1: Login/Input, 2: Dashboard
+	xrayServer  *core.Instance
+	connected   bool
+	serverUUID  string
 )
 
 const (
-	WS_OVERLAPPED = 0x00000000
-	WS_CAPTION    = 0x00C00000
-	WS_SYSMENU    = 0x00080000
-	WS_MINIMIZEBOX= 0x00020000
-	WS_VISIBLE    = 0x10000000
-	WS_CHILD      = 0x40000000
-	ES_MULTILINE  = 0x0004
-	ES_AUTOVSCROLL= 0x0040
-	WM_DESTROY    = 0x0002
-	WM_PAINT      = 0x000F
-	WM_COMMAND    = 0x0111
-	WM_SETFONT    = 0x0030
+	WS_OVERLAPPED  = 0x00000000
+	WS_CAPTION     = 0x00C00000
+	WS_SYSMENU     = 0x00080000
+	WS_MINIMIZEBOX = 0x00020000
+	WS_VISIBLE     = 0x10000000
+	WS_CHILD       = 0x40000000
+	ES_MULTILINE   = 0x0004
+	ES_AUTOVSCROLL = 0x0040
+	WM_DESTROY     = 0x0002
+	WM_PAINT       = 0x000F
+	WM_COMMAND     = 0x0111
+	WM_SETFONT     = 0x0030
 	WM_CTLCOLORSTATIC = 0x0138
 	WM_CTLCOLOREDIT   = 0x0133
+	SW_HIDE        = 0
+	SW_SHOW        = 5
 
-	// Theme colors (matching Android mobile layout)
 	CLR_BG       = 0x190F0B // #0B0F19
 	CLR_CARD     = 0x241913 // #131924
 	CLR_BORDER   = 0x36251C // #1C2536
 	CLR_INPUT_BG = 0x1F150F // #0F151F
-	CLR_BTN      = 0xEB6325 // #2563EB (Brand blue)
 	CLR_TXT_MAIN = 0xFFFFFF
 	CLR_TXT_MUTED= 0x94A3B8
-	CLR_SUCCESS  = 0xA0D606 // #06D6A0 (Neon emerald)
-	CLR_DANGER   = 0x5053EF // #EF5350 (Coral red)
+	CLR_SUCCESS  = 0xA0D606 // #06D6A0
+	CLR_DANGER   = 0x5053EF // #EF5350
 
 	PANEL_BASE   = "http://67.215.255.156:13688"
+	WIN_W        = 456
+	WIN_H        = 490
 )
 
 type WNDCLASSEX struct {
@@ -141,33 +151,60 @@ func setSystemProxy(enable bool, proxyAddr string) {
 	procInternetSet.Call(0, 37, 0, 0)
 }
 
+func switchPage(page int) {
+	currentPage = page
+	show1 := SW_HIDE
+	show2 := SW_HIDE
+	if page == 1 {
+		show1 = SW_SHOW
+	} else {
+		show2 = SW_SHOW
+	}
+
+	for _, h := range []windows.HWND{hwndPage1Title, hwndPage1Sub, hwndEdit, hwndBtnLogin, hwndLoginTip} {
+		procShowWindow.Call(uintptr(h), uintptr(show1))
+	}
+	for _, h := range []windows.HWND{hwndPage2Title, hwndBtnBack, hwndBtnConnect, hwndStatus, hwndTraffic, hwndDetail} {
+		procShowWindow.Call(uintptr(h), uintptr(show2))
+	}
+	procInvalidate.Call(uintptr(hwndMain), 0, 1)
+}
+
 func wndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
 	case WM_PAINT:
 		var ps PAINTSTRUCT
 		hdc, _, _ := procBeginPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
 
-		// Draw card backgrounds (Input card & Stats card)
 		procSelectObject.Call(hdc, uintptr(hPenCard))
 		procSelectObject.Call(hdc, uintptr(hBrushCard))
 
-		// 1. Input card
-		procRoundRect.Call(hdc, 24, 75, 416, 205, 12, 12)
-		// 2. Stats card
-		procRoundRect.Call(hdc, 24, 290, 416, 420, 12, 12)
+		if currentPage == 1 {
+			procRoundRect.Call(hdc, 24, 75, 416, 260, 12, 12)
+		} else {
+			procRoundRect.Call(hdc, 24, 180, 416, 420, 12, 12)
+		}
 
 		procEndPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
 		return 0
 
 	case WM_COMMAND:
-		if lParam == uintptr(hwndBtn) {
+		switch lParam {
+		case uintptr(hwndBtnLogin):
+			handleLogin()
+		case uintptr(hwndBtnBack):
+			if connected {
+				stopProxy()
+			}
+			switchPage(1)
+		case uintptr(hwndBtnConnect):
 			go toggleConnect()
 		}
 		return 0
 
 	case WM_CTLCOLORSTATIC:
 		hdc := wParam
-		procSetBkMode.Call(hdc, 1) // TRANSPARENT
+		procSetBkMode.Call(hdc, 1)
 		target := windows.HWND(lParam)
 		if target == hwndStatus {
 			if connected {
@@ -175,9 +212,11 @@ func wndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 			} else {
 				procSetTextColor.Call(hdc, CLR_DANGER)
 			}
+		} else if target == hwndLoginTip {
+			procSetTextColor.Call(hdc, CLR_DANGER)
 		} else if target == hwndTraffic {
 			procSetTextColor.Call(hdc, CLR_TXT_MAIN)
-		} else if target == hwndDetail {
+		} else if target == hwndDetail || target == hwndPage1Sub {
 			procSetTextColor.Call(hdc, CLR_TXT_MUTED)
 		} else {
 			procSetTextColor.Call(hdc, CLR_TXT_MAIN)
@@ -251,6 +290,22 @@ func getText(hwnd windows.HWND) string {
 	return windows.UTF16ToString(buf)
 }
 
+func handleLogin() {
+	raw := getText(hwndEdit)
+	uuid, _, _, _, _, _, _, err := parseVless(raw)
+	if err != nil {
+		setText(hwndLoginTip, "● 链接无效，请粘贴正确的 vless:// 节点链接")
+		return
+	}
+	serverUUID = uuid
+	if k, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\XPanel`, registry.ALL_ACCESS); err == nil {
+		k.SetStringValue("link", raw)
+		k.Close()
+	}
+	setText(hwndLoginTip, "")
+	switchPage(2)
+}
+
 func toggleConnect() {
 	if connected {
 		stopProxy()
@@ -263,22 +318,17 @@ func startProxy() {
 	raw := getText(hwndEdit)
 	uuid, address, port, sni, pbk, sid, flow, err := parseVless(raw)
 	if err != nil {
-		setText(hwndStatus, "● 链接格式错误 (需 vless://)")
+		setText(hwndStatus, "● 链接格式错误")
 		return
 	}
 	serverUUID = uuid
-
-	if k, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\XPanel`, registry.ALL_ACCESS); err == nil {
-		k.SetStringValue("link", raw)
-		k.Close()
-	}
 
 	setText(hwndStatus, "● 正在连接...")
 	confJSON := buildXrayConfig(uuid, address, port, sni, pbk, sid, flow)
 
 	conf, err := core.LoadConfig("json", bytes.NewReader([]byte(confJSON)))
 	if err != nil {
-		setText(hwndStatus, "● 配置错误")
+		setText(hwndStatus, "● 配置构建错误")
 		return
 	}
 	server, err := core.New(conf)
@@ -294,8 +344,8 @@ func startProxy() {
 	setSystemProxy(true, "127.0.0.1:10809")
 	connected = true
 
-	setText(hwndBtn, "断开连接")
-	setText(hwndStatus, "● 已安全连接 (系统代理: 127.0.0.1:10809)")
+	setText(hwndBtnConnect, "断开连接")
+	setText(hwndStatus, "● 已连接加速 (代理: 127.0.0.1:10809)")
 }
 
 func stopProxy() {
@@ -305,14 +355,14 @@ func stopProxy() {
 	}
 	setSystemProxy(false, "")
 	connected = false
-	setText(hwndBtn, "一键连接")
+	setText(hwndBtnConnect, "一键连接加速")
 	setText(hwndStatus, "○ 未连接")
 }
 
 func pollTraffic() {
 	for {
 		time.Sleep(2 * time.Second)
-		if serverUUID == "" {
+		if serverUUID == "" || currentPage != 2 {
 			continue
 		}
 		resp, err := http.Get(PANEL_BASE + "/panel/pub/traffic/" + serverUUID)
@@ -351,7 +401,7 @@ func main() {
 
 	instRaw, _, _ := procGetModule.Call(0)
 	inst := windows.Handle(instRaw)
-	className, _ := windows.UTF16PtrFromString("XPanelWinV3")
+	className, _ := windows.UTF16PtrFromString("XPanelWinV4")
 	wndTitle, _ := windows.UTF16PtrFromString("X-Panel")
 
 	hIconRaw, _, _ := procLoadIcon.Call(uintptr(inst), 100)
@@ -363,8 +413,6 @@ func main() {
 	hBrushCard = windows.Handle(hCardRaw)
 	hInRaw, _, _ := procCreateSolid.Call(CLR_INPUT_BG)
 	hBrushInput = windows.Handle(hInRaw)
-	hBtnRaw, _, _ := procCreateSolid.Call(CLR_BTN)
-	hBrushBtn = windows.Handle(hBtnRaw)
 
 	hPenCardRaw, _, _ := procCreatePen.Call(0, 1, CLR_BORDER)
 	hPenCard = windows.Handle(hPenCardRaw)
@@ -374,7 +422,7 @@ func main() {
 	hFontEdit  = createFont(13, false)
 	hFontBtn   = createFont(16, true)
 	hFontStat  = createFont(14, true)
-	hFontVal   = createFont(24, true)
+	hFontVal   = createFont(26, true)
 
 	wc := WNDCLASSEX{
 		CbSize:        uint32(unsafe.Sizeof(WNDCLASSEX{})),
@@ -387,10 +435,16 @@ func main() {
 	}
 	procRegisterClass.Call(uintptr(unsafe.Pointer(&wc)))
 
+	// 居中屏幕
+	scrW, _, _ := procGetSystemMetrics.Call(0)
+	scrH, _, _ := procGetSystemMetrics.Call(1)
+	posX := (int32(scrW) - WIN_W) / 2
+	posY := (int32(scrH) - WIN_H) / 2
+
 	hwndRaw, _, _ := procCreateWindow.Call(
 		0, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(wndTitle)),
 		WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX|WS_VISIBLE,
-		250, 180, 456, 490, 0, 0, uintptr(inst), 0,
+		uintptr(posX), uintptr(posY), WIN_W, WIN_H, 0, 0, uintptr(inst), 0,
 	)
 	hwndMain = windows.HWND(hwndRaw)
 
@@ -398,20 +452,62 @@ func main() {
 	editClass, _   := windows.UTF16PtrFromString("EDIT")
 	btnClass, _    := windows.UTF16PtrFromString("BUTTON")
 
-	// 1. Header: X-Panel title + Subtitle
-	t1, _ := windows.UTF16PtrFromString("X-Panel")
-	hT1, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(t1)), WS_CHILD|WS_VISIBLE, 24, 18, 300, 26, uintptr(hwndMain), 0, uintptr(inst), 0)
-	procSendMessage.Call(hT1, WM_SETFONT, hFontTitle, 1)
+	// ==================== PAGE 1 (输入登录界面) ====================
+	tP1, _ := windows.UTF16PtrFromString("X-Panel")
+	hP1T, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(tP1)), WS_CHILD|WS_VISIBLE, 24, 20, 392, 28, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hwndPage1Title = windows.HWND(hP1T)
+	procSendMessage.Call(hP1T, WM_SETFONT, hFontTitle, 1)
 
-	t2, _ := windows.UTF16PtrFromString("极简安全代理 · 实时流量监测")
-	hT2, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(t2)), WS_CHILD|WS_VISIBLE, 24, 46, 300, 18, uintptr(hwndMain), 0, uintptr(inst), 0)
-	procSendMessage.Call(hT2, WM_SETFONT, hFontSub, 1)
+	sP1, _ := windows.UTF16PtrFromString("粘贴协议链接，登录进入主面板")
+	hP1S, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(sP1)), WS_CHILD|WS_VISIBLE, 24, 48, 392, 18, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hwndPage1Sub = windows.HWND(hP1S)
+	procSendMessage.Call(hP1S, WM_SETFONT, hFontSub, 1)
 
-	// 2. Input card: Edit field
-	hEdit, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(editClass)), 0, WS_CHILD|WS_VISIBLE|ES_MULTILINE|ES_AUTOVSCROLL, 40, 90, 360, 100, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hEdit, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(editClass)), 0, WS_CHILD|WS_VISIBLE|ES_MULTILINE|ES_AUTOVSCROLL, 40, 90, 360, 150, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndEdit = windows.HWND(hEdit)
 	procSendMessage.Call(uintptr(hwndEdit), WM_SETFONT, hFontEdit, 1)
 
+	btnLgText, _ := windows.UTF16PtrFromString("登 录")
+	hBtnLg, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnLgText)), WS_CHILD|WS_VISIBLE, 24, 280, 392, 46, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hwndBtnLogin = windows.HWND(hBtnLg)
+	procSendMessage.Call(uintptr(hwndBtnLogin), WM_SETFONT, hFontBtn, 1)
+
+	hTip, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), 0, WS_CHILD|WS_VISIBLE, 24, 340, 392, 22, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hwndLoginTip = windows.HWND(hTip)
+	procSendMessage.Call(uintptr(hwndLoginTip), WM_SETFONT, hFontSub, 1)
+
+	// ==================== PAGE 2 (连接仪表盘界面) ====================
+	tP2, _ := windows.UTF16PtrFromString("X-Panel 节点加速")
+	hP2T, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(tP2)), WS_CHILD, 24, 20, 280, 28, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hwndPage2Title = windows.HWND(hP2T)
+	procSendMessage.Call(hP2T, WM_SETFONT, hFontTitle, 1)
+
+	btnBkText, _ := windows.UTF16PtrFromString("切换节点")
+	hBtnBk, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnBkText)), WS_CHILD, 320, 18, 96, 32, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hwndBtnBack = windows.HWND(hBtnBk)
+	procSendMessage.Call(uintptr(hwndBtnBack), WM_SETFONT, hFontSub, 1)
+
+	btnConnText, _ := windows.UTF16PtrFromString("一键连接加速")
+	hBtnConn, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnConnText)), WS_CHILD, 24, 90, 392, 64, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hwndBtnConnect = windows.HWND(hBtnConn)
+	procSendMessage.Call(uintptr(hwndBtnConnect), WM_SETFONT, hFontBtn, 1)
+
+	stText, _ := windows.UTF16PtrFromString("○ 未连接")
+	hStatus, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(stText)), WS_CHILD, 40, 200, 360, 24, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hwndStatus = windows.HWND(hStatus)
+	procSendMessage.Call(uintptr(hwndStatus), WM_SETFONT, hFontStat, 1)
+
+	trText, _ := windows.UTF16PtrFromString("0.00 MB")
+	hTraffic, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(trText)), WS_CHILD, 40, 235, 360, 36, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hwndTraffic = windows.HWND(hTraffic)
+	procSendMessage.Call(uintptr(hwndTraffic), WM_SETFONT, hFontVal, 1)
+
+	dtText, _ := windows.UTF16PtrFromString("↑ 上行: 0.00 MB      ↓ 下行: 0.00 MB")
+	hDetail, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(dtText)), WS_CHILD, 40, 300, 360, 20, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hwndDetail = windows.HWND(hDetail)
+	procSendMessage.Call(uintptr(hwndDetail), WM_SETFONT, hFontSub, 1)
+
+	// 历史链接恢复：有则预填入
 	if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\XPanel`, registry.QUERY_VALUE); err == nil {
 		if s, _, err := k.GetStringValue("link"); err == nil && s != "" {
 			setText(hwndEdit, s)
@@ -419,28 +515,7 @@ func main() {
 		k.Close()
 	}
 
-	// 3. Connect Button
-	btnText, _ := windows.UTF16PtrFromString("一键连接")
-	hBtn, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnText)), WS_CHILD|WS_VISIBLE, 24, 222, 392, 46, uintptr(hwndMain), 0, uintptr(inst), 0)
-	hwndBtn = windows.HWND(hBtn)
-	procSendMessage.Call(uintptr(hwndBtn), WM_SETFONT, hFontBtn, 1)
-
-	// 4. Stats card content
-	stText, _ := windows.UTF16PtrFromString("○ 未连接")
-	hStatus, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(stText)), WS_CHILD|WS_VISIBLE, 40, 304, 360, 22, uintptr(hwndMain), 0, uintptr(inst), 0)
-	hwndStatus = windows.HWND(hStatus)
-	procSendMessage.Call(uintptr(hwndStatus), WM_SETFONT, hFontStat, 1)
-
-	trText, _ := windows.UTF16PtrFromString("0.00 MB")
-	hTraffic, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(trText)), WS_CHILD|WS_VISIBLE, 40, 332, 360, 34, uintptr(hwndMain), 0, uintptr(inst), 0)
-	hwndTraffic = windows.HWND(hTraffic)
-	procSendMessage.Call(uintptr(hwndTraffic), WM_SETFONT, hFontVal, 1)
-
-	dtText, _ := windows.UTF16PtrFromString("↑ 上行: 0.00 MB      ↓ 下行: 0.00 MB")
-	hDetail, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(dtText)), WS_CHILD|WS_VISIBLE, 40, 376, 360, 20, uintptr(hwndMain), 0, uintptr(inst), 0)
-	hwndDetail = windows.HWND(hDetail)
-	procSendMessage.Call(uintptr(hwndDetail), WM_SETFONT, hFontSub, 1)
-
+	switchPage(1)
 	go pollTraffic()
 
 	var msg MSG
