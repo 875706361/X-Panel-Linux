@@ -268,7 +268,7 @@ func startProxy() {
 	}
 	serverUUID = uuid
 
-	if k, err := registry.CreateKey(registry.CURRENT_USER, `Software\XPanel`, registry.ALL_ACCESS); err == nil {
+	if k, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\XPanel`, registry.ALL_ACCESS); err == nil {
 		k.SetStringValue("link", raw)
 		k.Close()
 	}
