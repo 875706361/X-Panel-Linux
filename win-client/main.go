@@ -96,8 +96,8 @@ const (
 	CLR_DANGER   = 0x5053EF // #EF5350
 
 	PANEL_BASE   = "http://67.215.255.156:13688"
-	WIN_W        = 456
-	WIN_H        = 490
+	WIN_W        = 560
+	WIN_H        = 640
 )
 
 type WNDCLASSEX struct {
@@ -180,9 +180,9 @@ func wndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 		procSelectObject.Call(hdc, uintptr(hBrushCard))
 
 		if currentPage == 1 {
-			procRoundRect.Call(hdc, 24, 75, 416, 260, 12, 12)
+			procRoundRect.Call(hdc, 30, 85, 514, 390, 16, 16)
 		} else {
-			procRoundRect.Call(hdc, 24, 180, 416, 420, 12, 12)
+			procRoundRect.Call(hdc, 30, 200, 514, 550, 16, 16)
 		}
 
 		procEndPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
@@ -454,56 +454,56 @@ func main() {
 
 	// ==================== PAGE 1 (输入登录界面) ====================
 	tP1, _ := windows.UTF16PtrFromString("X-Panel")
-	hP1T, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(tP1)), WS_CHILD|WS_VISIBLE, 24, 20, 392, 28, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hP1T, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(tP1)), WS_CHILD|WS_VISIBLE, 30, 24, 480, 32, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndPage1Title = windows.HWND(hP1T)
 	procSendMessage.Call(hP1T, WM_SETFONT, hFontTitle, 1)
 
 	sP1, _ := windows.UTF16PtrFromString("粘贴协议链接，登录进入主面板")
-	hP1S, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(sP1)), WS_CHILD|WS_VISIBLE, 24, 48, 392, 18, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hP1S, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(sP1)), WS_CHILD|WS_VISIBLE, 30, 56, 480, 20, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndPage1Sub = windows.HWND(hP1S)
 	procSendMessage.Call(hP1S, WM_SETFONT, hFontSub, 1)
 
-	hEdit, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(editClass)), 0, WS_CHILD|WS_VISIBLE|ES_MULTILINE|ES_AUTOVSCROLL, 40, 90, 360, 150, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hEdit, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(editClass)), 0, WS_CHILD|WS_VISIBLE|ES_MULTILINE|ES_AUTOVSCROLL, 48, 102, 448, 268, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndEdit = windows.HWND(hEdit)
 	procSendMessage.Call(uintptr(hwndEdit), WM_SETFONT, hFontEdit, 1)
 
 	btnLgText, _ := windows.UTF16PtrFromString("登 录")
-	hBtnLg, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnLgText)), WS_CHILD|WS_VISIBLE, 24, 280, 392, 46, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hBtnLg, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnLgText)), WS_CHILD|WS_VISIBLE, 30, 416, 484, 52, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndBtnLogin = windows.HWND(hBtnLg)
 	procSendMessage.Call(uintptr(hwndBtnLogin), WM_SETFONT, hFontBtn, 1)
 
-	hTip, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), 0, WS_CHILD|WS_VISIBLE, 24, 340, 392, 22, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hTip, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), 0, WS_CHILD|WS_VISIBLE, 30, 480, 484, 24, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndLoginTip = windows.HWND(hTip)
 	procSendMessage.Call(uintptr(hwndLoginTip), WM_SETFONT, hFontSub, 1)
 
 	// ==================== PAGE 2 (连接仪表盘界面) ====================
 	tP2, _ := windows.UTF16PtrFromString("X-Panel 节点加速")
-	hP2T, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(tP2)), WS_CHILD, 24, 20, 280, 28, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hP2T, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(tP2)), WS_CHILD, 30, 24, 340, 32, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndPage2Title = windows.HWND(hP2T)
 	procSendMessage.Call(hP2T, WM_SETFONT, hFontTitle, 1)
 
 	btnBkText, _ := windows.UTF16PtrFromString("切换节点")
-	hBtnBk, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnBkText)), WS_CHILD, 320, 18, 96, 32, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hBtnBk, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnBkText)), WS_CHILD, 394, 22, 120, 36, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndBtnBack = windows.HWND(hBtnBk)
 	procSendMessage.Call(uintptr(hwndBtnBack), WM_SETFONT, hFontSub, 1)
 
 	btnConnText, _ := windows.UTF16PtrFromString("一键连接加速")
-	hBtnConn, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnConnText)), WS_CHILD, 24, 90, 392, 64, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hBtnConn, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnConnText)), WS_CHILD, 30, 96, 484, 76, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndBtnConnect = windows.HWND(hBtnConn)
 	procSendMessage.Call(uintptr(hwndBtnConnect), WM_SETFONT, hFontBtn, 1)
 
 	stText, _ := windows.UTF16PtrFromString("○ 未连接")
-	hStatus, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(stText)), WS_CHILD, 40, 200, 360, 24, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hStatus, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(stText)), WS_CHILD, 50, 224, 444, 28, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndStatus = windows.HWND(hStatus)
 	procSendMessage.Call(uintptr(hwndStatus), WM_SETFONT, hFontStat, 1)
 
 	trText, _ := windows.UTF16PtrFromString("0.00 MB")
-	hTraffic, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(trText)), WS_CHILD, 40, 235, 360, 36, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hTraffic, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(trText)), WS_CHILD, 50, 268, 444, 44, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndTraffic = windows.HWND(hTraffic)
 	procSendMessage.Call(uintptr(hwndTraffic), WM_SETFONT, hFontVal, 1)
 
 	dtText, _ := windows.UTF16PtrFromString("↑ 上行: 0.00 MB      ↓ 下行: 0.00 MB")
-	hDetail, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(dtText)), WS_CHILD, 40, 300, 360, 20, uintptr(hwndMain), 0, uintptr(inst), 0)
+	hDetail, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(dtText)), WS_CHILD, 50, 332, 444, 26, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndDetail = windows.HWND(hDetail)
 	procSendMessage.Call(uintptr(hwndDetail), WM_SETFONT, hFontSub, 1)
 
