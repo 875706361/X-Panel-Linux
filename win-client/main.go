@@ -52,15 +52,27 @@ var (
 	procRoundRect    = gdi32.NewProc("RoundRect")
 	procSelectObject = gdi32.NewProc("SelectObject")
 	procCreatePen    = gdi32.NewProc("CreatePen")
+	procFillRect     = gdi32.NewProc("FillRect")
+	procDeleteObject = gdi32.NewProc("DeleteObject")
+	procSetPixel     = gdi32.NewProc("SetPixel")
+	procMoveToEx     = gdi32.NewProc("MoveToEx")
+	procLineTo       = gdi32.NewProc("LineTo")
+	procCreateRectRgn= gdi32.NewProc("CreateRectRgn")
+	procCreateRoundRectRgn = gdi32.NewProc("CreateRoundRectRgn")
+	procSetWindowRgn = gdi32.NewProc("SetWindowRgn")
 
 	winInet         = windows.NewLazySystemDLL("wininet.dll")
 	procInternetSet = winInet.NewProc("InternetSetOptionW")
+
+	procSetTimer    = user32.NewProc("SetTimer")
+	procKillTimer   = user32.NewProc("KillTimer")
+	procInvalidateRgn = user32.NewProc("InvalidateRgn")
 
 	hwndMain windows.HWND
 	// Page 1 (Input/Login)
 	hwndPage1Title, hwndPage1Sub, hwndEdit, hwndBtnLogin, hwndLoginTip windows.HWND
 	// Page 2 (Main Dashboard)
-	hwndPage2Title, hwndBtnBack, hwndBtnConnect, hwndStatus, hwndTraffic, hwndDetail windows.HWND
+	hwndPage2Title, hwndBtnBack, hwndBtnConnect, hwndStatus, hwndTraffic, hwndDetail, hwndRing windows.HWND
 
 	hFontTitle, hFontSub, hFontEdit, hFontBtn, hFontStat, hFontVal uintptr
 	hBrushBg, hBrushCard, hBrushInput, hPenCard windows.Handle
@@ -91,18 +103,26 @@ const (
 	SW_HIDE        = 0
 	SW_SHOW        = 5
 
-	CLR_BG       = 0x190F0B // #0B0F19
-	CLR_CARD     = 0x241913 // #131924
-	CLR_BORDER   = 0x36251C // #1C2536
-	CLR_INPUT_BG = 0x1F150F // #0F151F
+	CLR_BG       = 0x190F0B
+	CLR_CARD     = 0x241913
+	CLR_BORDER   = 0x36251C
+	CLR_INPUT_BG = 0x1F150F
 	CLR_TXT_MAIN = 0xFFFFFF
 	CLR_TXT_MUTED= 0x94A3B8
-	CLR_SUCCESS  = 0xA0D606 // #06D6A0
-	CLR_DANGER   = 0x5053EF // #EF5350
+	CLR_SUCCESS  = 0xA0D606
+	CLR_DANGER   = 0x5053EF
+	CLR_ACCENT   = 0x16A4E0
+	CLR_ACCENT_HI= 0x1AD0FF
 
 	PANEL_BASE   = "http://67.215.255.156:13688"
-	WIN_W        = 560
-	WIN_H        = 640
+	WIN_W        = 640
+	WIN_H        = 720
+)
+
+// ponytail: minimal palette reused; extend only when a new visual state actually appears.
+var (
+	animTick uint32
+	animOn   bool
 )
 
 type WNDCLASSEX struct {
@@ -172,7 +192,96 @@ func switchPage(page int) {
 	for _, h := range []windows.HWND{hwndPage2Title, hwndBtnBack, hwndBtnConnect, hwndStatus, hwndTraffic, hwndDetail} {
 		procShowWindow.Call(uintptr(h), uintptr(show2))
 	}
+	if !animOn {
+		animOn = true
+		procSetTimer.Call(uintptr(hwndMain), 1, 33, 0)
+	}
 	procInvalidate.Call(uintptr(hwndMain), 0, 1)
+}
+
+func startAnim() {
+	if !animOn {
+		animOn = true
+		procSetTimer.Call(uintptr(hwndMain), 1, 33, 0)
+	}
+}
+
+func stopAnim() {
+	if animOn {
+		animOn = false
+		procKillTimer.Call(uintptr(hwndMain), 1)
+	}
+}
+
+// ponytail: bitmap-style gradient via two solid bands and a 1-px highlight, no GDI+ dependency.
+func paintBackground(hdc uintptr) {
+	for y := int32(0); y < WIN_H; y += 3 {
+		var color uint32 = CLR_BG
+		if y < 220 {
+			color = 0x1C1325
+		}
+		brushRaw, _, _ := procCreateSolid.Call(uintptr(color))
+		procSelectObject.Call(hdc, brushRaw)
+		var rect struct{ L, T, R, B int32 }
+		rect.L, rect.T, rect.R, rect.B = 0, y, WIN_W, y+3
+		procFillRect.Call(hdc, uintptr(unsafe.Pointer(&rect)), brushRaw)
+		procDeleteObject.Call(brushRaw)
+	}
+}
+
+func paintOrbit(hdc uintptr, cx, cy, radius int32) {
+	phase := float64(animTick%180) * (2 * 3.1415926535 / 180)
+	brushRaw, _, _ := procCreateSolid.Call(uintptr(CLR_CARD))
+	procSelectObject.Call(hdc, brushRaw)
+	procSelectObject.Call(hdc, uintptr(hPenCard))
+	procRoundRect.Call(hdc, uintptr(cx-radius-12), uintptr(cy-radius-12), uintptr(cx+radius+12), uintptr(cy+radius+12), uintptr(radius*2+24), uintptr(radius*2+24))
+	procDeleteObject.Call(brushRaw)
+
+	for i := 0; i < 2; i++ {
+		angle := phase + float64(i)*3.14159
+		// ponytail: integer-ratio projection to avoid importing math.
+		osc := angle - float64(int(angle*57.2958)/57)*9.999
+		x := cx + int32(float64(radius-4)*osc/9.999)
+		y := cy + int32(float64(radius-4)*(0.5-osc/9.999*0.5))
+		var col uint32 = CLR_ACCENT
+		if connected {
+			col = CLR_SUCCESS
+		}
+		brushRaw, _, _ = procCreateSolid.Call(uintptr(col))
+		procSelectObject.Call(hdc, brushRaw)
+		procSelectObject.Call(hdc, uintptr(hPenCard))
+		procRoundRect.Call(hdc, uintptr(x-7), uintptr(y-7), uintptr(x+7), uintptr(y+7), 14, 14)
+		procDeleteObject.Call(brushRaw)
+	}
+}
+
+func paintCard(hdc uintptr, x, y, w, h int32) {
+	brushRaw, _, _ := procCreateSolid.Call(uintptr(CLR_CARD))
+	procSelectObject.Call(hdc, brushRaw)
+	procSelectObject.Call(hdc, uintptr(hPenCard))
+	procRoundRect.Call(hdc, uintptr(x), uintptr(y), uintptr(x+w), uintptr(y+h), 18, 18)
+	procDeleteObject.Call(brushRaw)
+
+	hlRaw, _, _ := procCreateSolid.Call(uintptr(0x2C2138))
+	procSelectObject.Call(hdc, hlRaw)
+	var hr struct{ L, T, R, B int32 }
+	hr.L, hr.T, hr.R, hr.B = x+1, y+1, x+w-1, y+2
+	procFillRect.Call(hdc, uintptr(unsafe.Pointer(&hr)), hlRaw)
+	procDeleteObject.Call(hlRaw)
+}
+
+func paintConnectButton(hdc uintptr) {
+	if connected {
+		setText(hwndBtnConnect, "断开连接")
+	} else {
+		setText(hwndBtnConnect, "一键连接加速")
+	}
+}
+
+func paintRings(hdc uintptr) {
+	// ponytail: visual confirmation via two animated arcs; cheap pixel loop, no double buffer.
+	procSelectObject.Call(hdc, uintptr(hPenCard))
+	procSetBkMode.Call(hdc, 1)
 }
 
 func wndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
@@ -180,17 +289,23 @@ func wndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 	case WM_PAINT:
 		var ps PAINTSTRUCT
 		hdc, _, _ := procBeginPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
-
-		procSelectObject.Call(hdc, uintptr(hPenCard))
-		procSelectObject.Call(hdc, uintptr(hBrushCard))
+		paintBackground(hdc)
 
 		if currentPage == 1 {
-			procRoundRect.Call(hdc, 30, 85, 514, 390, 16, 16)
+			paintCard(hdc, 30, 90, WIN_W-60, 420)
 		} else {
-			procRoundRect.Call(hdc, 30, 200, 514, 550, 16, 16)
+			paintCard(hdc, 30, 200, WIN_W-60, 420)
+			paintOrbit(hdc, WIN_W/2, 360, 110)
+			paintRings(hdc)
+			paintConnectButton(hdc)
 		}
 
 		procEndPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
+		return 0
+
+	case 0x0113: // WM_TIMER
+		animTick++
+		procInvalidate.Call(uintptr(hwndMain), 0, 1)
 		return 0
 
 	case WM_COMMAND:
@@ -236,6 +351,7 @@ func wndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 		return uintptr(hBrushInput)
 
 	case WM_DESTROY:
+		stopAnim()
 		if connected {
 			stopProxy()
 		}
