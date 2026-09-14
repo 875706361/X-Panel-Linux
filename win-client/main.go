@@ -789,7 +789,7 @@ func pollTraffic() {
 		}
 		setText(hwndExpire, expLine)
 
-		statusText := fmt.Sprintf("↑ %s/s  ↓ %s/s · 客户端 v5.3", fmtBytes(speedUp), fmtBytes(speedDown))
+		statusText := fmt.Sprintf("↑ %s/s  ↓ %s/s · 客户端 v5.3.1", fmtBytes(speedUp), fmtBytes(speedDown))
 		setText(hwndSpeedBar, statusText)
 	}
 }
@@ -825,7 +825,7 @@ func main() {
 			panic(r)
 		}
 	}()
-	log.Println("[INIT] 客户端 v5.3 启动中 (紧凑 450x490)...")
+	log.Println("[INIT] 客户端 v5.3.1 启动中 (紧凑 450x490)...")
 
 	procSetDPIAware.Call()
 
@@ -896,8 +896,8 @@ func main() {
 	}
 
 	// ==================== PAGE 1（登录/导入节点） ====================
-	hwndPage1Title = mk("导入节点配置", 26, 62, 300, 24, hFontTitle)
-	hwndPage1Sub = mk("粘贴 vless:// 节点链接，进入仪表盘", 26, 86, 400, 18, hFontSub)
+	hwndPage1Title = mk("导入节点配置", 24, 62, 300, 24, hFontTitle)
+	hwndPage1Sub = mk("粘贴 vless:// 节点链接，进入仪表盘", 24, 86, 402, 18, hFontSub)
 
 	// 输入卡片 (x=24, y=108, w=402, h=200) -> 文本框 (x=38, y=122, w=374, h=172)
 	hEdit, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(editClass)), 0, WS_CHILD|WS_VISIBLE|WS_BORDER|ES_MULTILINE|ES_AUTOVSCROLL, 38, 122, WIN_W-76, 172, uintptr(hwndMain), 0, uintptr(inst), 0)
@@ -912,7 +912,7 @@ func main() {
 
 	// ==================== PAGE 2（仪表盘主面板） ====================
 	hwndStatus = mk("● 未连接", 40, 72, 150, 20, hFontStat)
-	hwndExpire = mk("到期: 查询中...", 236, 72, 180, 20, hFontStat)
+	hwndExpire = mk("到期: 查询中...", 230, 72, 180, 20, hFontStat)
 
 	hwndLblTotal = mk("累计已用流量", 40, 100, 120, 16, hFontSub)
 
@@ -925,8 +925,8 @@ func main() {
 	hwndLblUp = mk("↑ 累计上传", 40, 184, 140, 16, hFontSub)
 	hwndUp = mk("0.00 MB", 40, 202, 180, 28, hFontBig)
 
-	hwndLblDown = mk("↓ 累计下载", 236, 184, 140, 16, hFontSub)
-	hwndDown = mk("0.00 MB", 236, 202, 180, 28, hFontBig)
+	hwndLblDown = mk("↓ 累计下载", 230, 184, 140, 16, hFontSub)
+	hwndDown = mk("0.00 MB", 230, 202, 180, 28, hFontBig)
 
 	// 连接主按钮
 	btnConnText, _ := windows.UTF16PtrFromString("启 动 加 速")
@@ -942,7 +942,7 @@ func main() {
 	hwndFooterDesc = mk("系统代理 · 本地 Socks 10808 / Http 10809", 24, 402, WIN_W-48, 18, hFontSub)
 
 	// 底部速度栏
-	hSpeedR, _ := windows.UTF16PtrFromString("↑ 0 B/s  ↓ 0 B/s · 客户端 v5.3")
+	hSpeedR, _ := windows.UTF16PtrFromString("↑ 0 B/s  ↓ 0 B/s · 客户端 v5.3.1")
 	hSpeed, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(hSpeedR)), WS_CHILD|WS_VISIBLE, 14, WIN_H-27, WIN_W-28, 18, uintptr(hwndMain), 0, uintptr(inst), 0)
 	hwndSpeedBar = windows.HWND(hSpeed)
 	procSendMessage.Call(uintptr(hwndSpeedBar), WM_SETFONT, hFontMono, 1)
