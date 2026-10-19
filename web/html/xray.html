@@ -1,7 +1,7 @@
 {{ template "page/head_start" .}}
-<link rel="stylesheet" href="{{ .base_path }}assets/codemirror/codemirror.min.css?{{ .cur_ver }}">
+<link rel="stylesheet" href="{{ .base_path }}assets/codemirror/codemirror.min.css?{{ .cache_ver }}">
 <link rel="stylesheet" href="{{ .base_path }}assets/codemirror/fold/foldgutter.css">
-<link rel="stylesheet" href="{{ .base_path }}assets/codemirror/xq.min.css?{{ .cur_ver }}">
+<link rel="stylesheet" href="{{ .base_path }}assets/codemirror/xq.min.css?{{ .cache_ver }}">
 <link rel="stylesheet" href="{{ .base_path }}assets/codemirror/lint/lint.css">
 <style>
   @media (min-width: 769px) {
@@ -46,11 +46,6 @@
   <a-layout id="content-layout">
     <a-layout-content>
       <a-spin :spinning="loadingStates.spinning" :delay="500" tip='{{ i18n "loading"}}'>
-        <transition name="list" appear>
-          <a-alert type="error" v-if="showAlert && loadingStates.fetched" :style="{ marginBottom: '10px' }" message='{{ i18n "secAlertTitle" }}'
-            color="red" description='{{ i18n "secAlertSsl" }}' show-icon closable>
-          </a-alert>
-        </transition>
         <transition name="list" appear>
           <a-row v-if="!loadingStates.fetched">
             <a-card :style="{ textAlign: 'center', padding: '30px 0', marginTop: '10px', background: 'transparent', border: 'none' }">
@@ -153,8 +148,8 @@
   </a-layout>
 </a-layout>
 {{template "page/body_scripts" .}}
-<script src="{{ .base_path }}assets/js/model/outbound.js?{{ .cur_ver }}"></script>
-<script src="{{ .base_path }}assets/codemirror/codemirror.min.js?{{ .cur_ver }}"></script>
+<script src="{{ .base_path }}assets/js/model/outbound.js?{{ .cache_ver }}"></script>
+<script src="{{ .base_path }}assets/codemirror/codemirror.min.js?{{ .cache_ver }}"></script>
 <script src="{{ .base_path }}assets/codemirror/javascript.js"></script>
 <script src="{{ .base_path }}assets/codemirror/jshint.js"></script>
 <script src="{{ .base_path }}assets/codemirror/jsonlint.js"></script>

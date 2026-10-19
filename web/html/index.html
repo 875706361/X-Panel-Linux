@@ -39,7 +39,7 @@
 
     /* 1. 标准布局 (Standard) */
     .theme-standard body {
-        background: #f0f2f5;
+        background: #ddf1ea;
     }
 
     .theme-standard.dark body {
@@ -141,10 +141,10 @@
     }
 
     .x-panel-logo-text {
-        font-size: 3rem;
-        font-weight: 900;
-        color: #fff;
-        animation: neonGlow 5s ease-in-out infinite alternate;
+        font-size: 1.7rem;
+        font-weight: 800;
+        color: #000000;
+        letter-spacing: 1px;
         text-align: center;
     }
 </style>
@@ -258,7 +258,7 @@
     }
 
     .light .glass-card .ant-card-actions span {
-        color: rgba(0, 0, 0, 0.65) !important;
+        color: #1e293b !important;
         transition: color 0.3s;
     }
 
@@ -282,7 +282,7 @@
 
     /* 通用字体颜色覆盖 */
     .light .glass-card * {
-        color: #2c3e50 !important;
+        color: #000000 !important;
     }
 
     .dark .glass-card *,
@@ -290,11 +290,21 @@
         color: #ecf0f1 !important;
     }
 
+    .light .glass-card .ant-card-head-title,
+    .light .glass-card .ant-card-head-title span { color: #000000 !important; font-size: 14px !important; font-weight: 600 !important; }
+
+    .light .glass-card .ant-statistic-title,
+    .light .glass-card .ant-statistic-title span { color: #334155 !important; font-size: 13px !important; font-weight: 600 !important; }
+
+    .light .glass-card .ant-statistic-content,
     .light .glass-card .ant-statistic-content-value,
-    .dark .glass-card .ant-statistic-content-value,
-    .black .glass-card .ant-statistic-content-value {
-        color: inherit !important;
-    }
+    .light .glass-card .ant-statistic-content-value-int,
+    .light .glass-card .ant-statistic-content-value-decimal { color: #000 !important; font-size: 14px !important; font-weight: 600 !important; }
+
+    .light .glass-card .ant-statistic-content-suffix,
+    .light .glass-card .ant-statistic-content-prefix { color: #000 !important; font-size: 14px !important; }
+    .light .glass-card .ant-tag-green,
+    .light .glass-card .ant-tag-green * { color: #000 !important; }
 
     /* ==================================================================
        ★★★★★  最终对齐方案：实现底部严格对齐  ★★★★★
@@ -368,25 +378,37 @@
 
     /* === X-Panel LOGO 标准样式 (无动画) === */
     .x-panel-logo-text {
-        font-size: 3rem;
-        font-weight: 900;
+        font-size: 1.7rem;
+        font-weight: 800;
         margin: 0;
-        text-transform: capitalize;
-        letter-spacing: 2px;
+        color: #000000;
+        letter-spacing: 1px;
         text-align: center;
-        line-height: 1.2;
+        line-height: 1.3;
     }
 
     .x-panel-desc {
         text-align: center;
-        font-size: 1rem;
-        color: inherit;
-        line-height: 1.5;
+        font-size: 0.9rem;
+        color: #334155;
+        line-height: 1.6;
     }
 
     .x-panel-desc b {
         font-weight: normal;
     }
+
+    /* 环形图下方指标说明：统一小字；允许换行，nowrap 会在窄屏溢出压到相邻列 */
+    .glass-card .ant-progress + div {
+        font-size: 13px;
+        line-height: 1.6;
+        margin-top: 2px;
+    }
+
+    /* 顶部安全提示：略压缩高度，减少压迫感但保持呼吸感 */
+    .ant-alert.ant-alert-error { padding: 11px 16px; }
+    .ant-alert.ant-alert-error .ant-alert-message { font-size: 13px; margin-bottom: 0; }
+    .ant-alert.ant-alert-error .ant-alert-description { font-size: 12px; line-height: 1.4; }
 </style>
 
 {{ template "page/head_end" .}}
@@ -397,12 +419,6 @@
     <a-layout id="content-layout">
         <a-layout-content>
             <a-spin :spinning="loadingStates.spinning" :delay="200" :tip="loadingTip">
-                <transition name="list" appear>
-                    <a-alert type="error" v-if="showAlert && loadingStates.fetched" :style="{ marginBottom: '10px' }"
-                        message='{{ i18n "secAlertTitle" }}' color="red" description='{{ i18n "secAlertSsl" }}'
-                        show-icon closable>
-                    </a-alert>
-                </transition>
                 <transition name="list" appear>
                     <template>
                         <a-row v-if="!loadingStates.fetched">
@@ -418,11 +434,8 @@
                                     <a-card hoverable :bordered="true" class="glass-card"
                                         :style="{ marginBottom: '16px', paddingBottom: '16px' }">
                                         <div class="x-panel-logo-text">X-Panel</div>
-                                        <br>
                                         <div class="x-panel-desc">
-                                            <b>{{ i18n "pages.index.betterPanel" }}</b>
-                                            <br><br>
-                                            <b>{{ i18n "pages.index.builtOnXray" }}</b>
+                                            {{ i18n "pages.index.betterPanel" }} · {{ i18n "pages.index.builtOnXray" }}
                                         </div>
                                     </a-card>
 
@@ -516,7 +529,7 @@
                                                 </a-popover>
                                             </template>
                                         </template>
-                                        <a-tag v-if="status.xray.version != 'Unknown'" color="green">v[[
+                                        <a-tag v-if="status.xray.version != 'Unknown'">v[[
                                             status.xray.version ]]</a-tag>
                                         <template #actions>
                                             <a-space v-if="app.ipLimitEnable" direction="horizontal"
@@ -625,9 +638,9 @@
                                         <div style="white-space: nowrap; overflow-x: auto;">
                                             <a rel="noopener" href="https://github.com/875706361/X-Panel-Linux/releases"
                                                 target="_blank">
-                                                <a-tag color="green"><span>v{{ .cur_ver }}</span></a-tag>
+                                                <a-tag><span>v{{ .cur_ver }}</span></a-tag>
                                             </a>
-                                            <a-tag color="purple"><span>✅ 此版本 Pro 功能已全部解锁</span></a-tag>
+                                            <a-tag><span>Pro 功能已解锁</span></a-tag>
                                         </div>
                                     </a-card>
 
@@ -637,13 +650,13 @@
                                         class="glass-card" :style="{ marginBottom: '16px' }">
                                         <a-tag :color="status.xray.color">Xray: [[
                                             TimeFormatter.formatSecond(status.appStats.uptime) ]]</a-tag>
-                                        <a-tag color="green">OS: [[ TimeFormatter.formatSecond(status.uptime) ]]</a-tag>
+                                        <a-tag>OS: [[ TimeFormatter.formatSecond(status.uptime) ]]</a-tag>
                                     </a-card>
 
                                     <a-card title='{{ i18n "pages.index.systemLoad" }}' hoverable :bordered="true"
                                         class="glass-card" :style="{ marginBottom: '16px' }">
                                         <div style="white-space: nowrap; overflow-x: auto;">
-                                            <a-tag color="green">
+                                            <a-tag>
                                                 <a-tooltip>
                                                     [[ status.loads[0] ]] | [[ status.loads[1] ]] | [[ status.loads[2]
                                                     ]]
@@ -652,18 +665,16 @@
                                                     </template>
                                                 </a-tooltip>
                                             </a-tag>
-                                            <a rel="noopener" href="https://ping.pe" target="_blank"><a-tag
-                                                    color="green">{{ i18n "pages.index.portCheck" }}</a-tag></a>
-                                            <a rel="noopener" href="https://www.speedtest.net" target="_blank"><a-tag
-                                                    color="green">{{ i18n "pages.index.speedTest" }}</a-tag></a>
+                                            <a rel="noopener" href="https://ping.pe" target="_blank"><a-tag>{{ i18n "pages.index.portCheck" }}</a-tag></a>
+                                            <a rel="noopener" href="https://www.speedtest.net" target="_blank"><a-tag>{{ i18n "pages.index.speedTest" }}</a-tag></a>
                                         </div>
                                     </a-card>
 
                                     <a-card title='{{ i18n "usage"}}' hoverable :bordered="true" class="glass-card"
                                         :style="{ marginBottom: '16px' }">
-                                        <a-tag color="green"> {{ i18n "pages.index.memory" }}: [[
+                                        <a-tag> {{ i18n "pages.index.memory" }}: [[
                                             SizeFormatter.sizeFormat(status.appStats.mem) ]] </a-tag>
-                                        <a-tag color="green"> {{ i18n "pages.index.threads" }}: [[
+                                        <a-tag> {{ i18n "pages.index.threads" }}: [[
                                             status.appStats.threads ]] </a-tag>
                                     </a-card>
 
@@ -864,9 +875,9 @@
 
 <script>
     (function () {
-        const savedTheme = localStorage.getItem('x-panel-ui-theme') || 'theme-colorful';
+        let savedTheme = localStorage.getItem('x-panel-ui-theme') || 'theme-standard';
+        if (savedTheme !== 'theme-standard') { savedTheme = 'theme-standard'; localStorage.setItem('x-panel-ui-theme', savedTheme); }
         document.body.classList.add(savedTheme);
-        console.log('已加载缓存主题: ' + savedTheme);
     })();
 </script>
 
@@ -888,7 +899,7 @@
         get color() {
             const percent = this.percent;
             if (percent < 80) {
-                return '#008771'; // Green
+                return '#0f9b76'; // Teal
             } else if (percent < 90) {
                 return "#f37b24"; // Orange
             } else {
@@ -987,7 +998,7 @@
         formatLogs(logs) {
             let formattedLogs = '';
             const levels = ["DEBUG", "INFO", "NOTICE", "WARNING", "ERROR"];
-            const levelColors = ["#3c89e8", "#008771", "#008771", "#f37b24", "#e04141", "#bcbcbc"];
+            const levelColors = ["#3ddbb0", "#0f9b76", "#0f9b76", "#f37b24", "#e04141", "#bcbcbc"];
 
             logs.forEach((log, index) => {
                 let [data, message] = log.split(" - ", 2);

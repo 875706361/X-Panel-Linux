@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"x-ui/config"
 	"x-ui/logger"
@@ -11,6 +13,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+var startTime = time.Now()
 
 func getRemoteIp(c *gin.Context) string {
 	value := c.GetHeader("X-Real-IP")
@@ -84,6 +88,7 @@ func html(c *gin.Context, name string, title string, data gin.H) {
 func getContext(h gin.H) gin.H {
 	a := gin.H{
 		"cur_ver": config.GetVersion(),
+		"cache_ver": fmt.Sprintf("%s.%d", config.GetVersion(), startTime.Unix()),
 	}
 	for key, value := range h {
 		a[key] = value

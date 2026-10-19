@@ -6,10 +6,6 @@
             
             <div class="sider-flex-wrapper">
                 
-                <div class="sider-top">
-                    <a-theme-switch></a-theme-switch>
-                </div>
-
                 <div class="sider-menu-container">
                     <a-menu :theme="themeSwitcher.currentTheme" mode="inline" :selected-keys="activeTab"
                         @click="({key}) => openLink(key)">
@@ -40,7 +36,6 @@
             <div class="drawer-handle" @click="toggleDrawer" slot="handle">
                 <a-icon :type="visible ? 'close' : 'menu-fold'"></a-icon>
             </div>
-            <a-theme-switch></a-theme-switch>
             <a-menu :theme="themeSwitcher.currentTheme" mode="inline" :selected-keys="activeTab"
                 @click="({key}) => openLink(key)">
                 <a-menu-item v-for="tab in tabs" :key="tab.key">
@@ -115,8 +110,8 @@
 
     /* 4. 年份版权行样式 */
     .year-row {
-        font-size: 11px;
-        opacity: 0.45; 
+        font-size: 12px;
+        opacity: 0.6; 
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         display: flex;
         justify-content: center;

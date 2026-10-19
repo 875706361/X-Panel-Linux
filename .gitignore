@@ -40,5 +40,11 @@ docker-compose.override.yml
 .envx-panel-new-pubapi
 
 web/assets/*.apk
+web/assets/*.docx
+web/assets/*.zip
+web/assets/*.exe
 app/build/
 app/src/main/jniLibs/*/*.so
+/x-ui-bin
+/x-ui-new
+/x-ui.new

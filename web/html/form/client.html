@@ -177,7 +177,17 @@
             </a-tooltip>
         </template>
         <a-date-picker v-if="datepicker == 'gregorian'" :show-time="{ format: 'HH:mm:ss' }" format="YYYY-MM-DD HH:mm:ss"
+            :locale="DateUtil.zhCNPickerLocale"
             :dropdown-class-name="themeSwitcher.currentTheme" v-model="client._expiryTime"></a-date-picker>
+        <div style="margin-top: 8px;">
+            <a-space size="small">
+                <a-button size="small" type="dashed" @click="DateUtil.addMonthsTo(client, '_expiryTime', 1)">+1个月</a-button>
+                <a-button size="small" type="dashed" @click="DateUtil.addMonthsTo(client, '_expiryTime', 3)">+3个月</a-button>
+                <a-button size="small" type="dashed" @click="DateUtil.addMonthsTo(client, '_expiryTime', 6)">+半年</a-button>
+                <a-button size="small" type="dashed" @click="DateUtil.addMonthsTo(client, '_expiryTime', 12)">+1年</a-button>
+                <a-button size="small" type="link" style="color: #888;" v-if="client.expiryTime > 0" @click="client.expiryTime = 0">清除</a-button>
+            </a-space>
+        </div>
         <a-persian-datepicker v-else placeholder='{{ i18n "pages.settings.datepickerPlaceholder" }}'
                             value="client._expiryTime" v-model="client._expiryTime"></a-persian-datepicker>
         <a-tag color="red" v-if="isEdit && isExpiry">Expired</a-tag>

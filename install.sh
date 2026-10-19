@@ -171,15 +171,17 @@ install_free_version() {
     install_x-ui() {
         cd /usr/local/
 
-        if [[ -z "$GITHUB_TOKEN" ]]; then
-            echo -e "${red}错误: 检测到私有仓库安装，未找到 GITHUB_TOKEN 环境变量。${plain}"
-            echo -e "${yellow}请在运行脚本前设置: export GITHUB_TOKEN=your_token${plain}"
-            exit 1
+        if [[ -z "$GITHUB_TOKEN" && -f /usr/local/x-ui/github_token ]]; then
+            GITHUB_TOKEN=$(cat /usr/local/x-ui/github_token | tr -d '\r\n ')
         fi
-        
-        # Helper for authenticated API calls
+
+        # Helper for authenticated or public API calls
         api_req() {
-            curl -s -H "Authorization: token $GITHUB_TOKEN" "$@"
+            if [[ -n "$GITHUB_TOKEN" ]]; then
+                curl -s -H "Authorization: token ${GITHUB_TOKEN}" "$@"
+            else
+                curl -s "$@"
+            fi
         }
 
         # Download resources
@@ -232,9 +234,21 @@ install_free_version() {
         echo -e "${green}---------------->>>>>>>>>>>>>>>>>>>>>下载资源 ID: ${asset_id}${plain}"
         
         # Download Asset
-        curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
-             "https://api.github.com/repos/875706361/X-Panel-Linux/releases/assets/$asset_id" \
-             -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
+        if [[ -n "$GITHUB_TOKEN" ]]; then
+            curl -L -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
+                 "https://api.github.com/repos/875706361/X-Panel-Linux/releases/assets/$asset_id" \
+                 -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
+        else
+            # Try public asset browser_download_url first
+            dl_url=$(echo "$release_json" | python3 -c "import sys, json; data = json.load(sys.stdin); print(next((a.get('browser_download_url','') for a in data.get('assets', []) if a.get('name') == '${target_file}'), ''))" 2>/dev/null || true)
+            if [[ -n "$dl_url" ]]; then
+                curl -L "$dl_url" -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
+            else
+                curl -L -H "Accept: application/octet-stream" \
+                     "https://api.github.com/repos/875706361/X-Panel-Linux/releases/assets/$asset_id" \
+                     -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
+            fi
+        fi
 
         if [[ $? -ne 0 ]]; then
             echo -e "${red}下载 X-Panel 失败${plain}"
@@ -242,9 +256,16 @@ install_free_version() {
         fi
 
         # Download x-ui.sh script (using Raw content API)
-        api_req -H "Accept: application/vnd.github.v3.raw" \
-            "https://api.github.com/repos/875706361/X-Panel-Linux/contents/x-ui.sh" \
-            -o /usr/bin/x-ui-temp
+        if [[ -n "$GITHUB_TOKEN" ]]; then
+            api_req -H "Accept: application/vnd.github.v3.raw" \
+                "https://api.github.com/repos/875706361/X-Panel-Linux/contents/x-ui.sh" \
+                -o /usr/bin/x-ui-temp
+        else
+            curl -Ls "https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/x-ui.sh" -o /usr/bin/x-ui-temp || \
+            api_req -H "Accept: application/vnd.github.v3.raw" \
+                "https://api.github.com/repos/875706361/X-Panel-Linux/contents/x-ui.sh" \
+                -o /usr/bin/x-ui-temp
+        fi
 
         # Stop x-ui service and remove old resources
         if [[ -e /usr/local/x-ui/ ]]; then

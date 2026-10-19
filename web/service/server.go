@@ -315,13 +315,33 @@ func (s *ServerService) GetStatus(lastStatus *Status) *Status {
 	return status
 }
 
+// githubApiGet 带 GitHub token 的 GET 请求：优先环境变量 GITHUB_TOKEN，
+// 其次 /usr/local/x-ui/github_token 文件，都没有则匿名（匿名限额低，共享 IP 易被限流）
+func githubApiGet(url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		if b, err := os.ReadFile("/usr/local/x-ui/github_token"); err == nil {
+			token = strings.TrimSpace(string(b))
+		}
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "token "+token)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	return http.DefaultClient.Do(req)
+}
+
 func (s *ServerService) GetXrayVersions() ([]string, error) {
 	const (
 		XrayURL    = "https://api.github.com/repos/XTLS/Xray-core/releases"
 		bufferSize = 8192
 	)
 
-	resp, err := http.Get(XrayURL)
+	resp, err := githubApiGet(XrayURL)
 	if err != nil {
 		return nil, err
 	}

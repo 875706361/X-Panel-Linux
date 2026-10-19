@@ -13,8 +13,26 @@
 
   .ant-form-item-children .ant-btn,
   .ant-input {
-    height: 50px;
-    border-radius: 30px;
+    height: 46px;
+    border-radius: 24px;
+  }
+
+  .ant-input-affix-wrapper {
+    height: 46px;
+    border-radius: 24px;
+    border: 1px solid #d9e8e2;
+    background: #f4faf7;
+  }
+
+  .ant-input-affix-wrapper:focus,
+  .ant-input-affix-wrapper-focused {
+    border-color: #0f9b76 !important;
+    box-shadow: 0 0 0 2px rgba(15, 155, 118, 0.12);
+  }
+
+  .ant-input-affix-wrapper .ant-input {
+    height: 44px;
+    border: none;
   }
 
   .ant-input-group-addon {
@@ -24,11 +42,17 @@
   }
 
   .ant-input-affix-wrapper .ant-input-prefix {
-    left: 23px;
+    left: 14px;
+    color: #94a3b8;
   }
 
   .ant-input-affix-wrapper .ant-input:not(:first-child) {
-    padding-left: 50px;
+    padding-left: 40px;
+  }
+
+  .ant-input::placeholder,
+  .ant-input-affix-wrapper input::placeholder {
+    color: #94a3b8;
   }
 
   .centered {
@@ -40,8 +64,25 @@
   }
 
   .title {
-    font-size: 2rem;
-    margin-block-end: 2rem;
+    font-size: 1.9rem;
+    margin-block-end: 1.75rem;
+    text-align: center;
+  }
+
+  .brand-line {
+    font-size: 1.9rem;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: 0.5px;
+    line-height: 1.25;
+  }
+
+  .brand-sub {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 2px;
+    margin-top: 4px;
   }
 
   .title b {
@@ -54,9 +95,11 @@
 
   #login {
     animation: charge 0.5s both;
-    background-color: #fff;
-    border-radius: 2rem;
-    padding: 4rem 3rem;
+    background-color: #ffffff;
+    border: 1px solid #e2f0ea;
+    border-radius: 28px;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+    padding: 3rem 2.5rem;
     transition: all 0.3s;
     user-select: none;
     -webkit-user-select: none;
@@ -80,7 +123,7 @@
   }
 
   .under {
-    background-color: #c7ebe2;
+    background-color: #ddf1ea;
     z-index: 0;
   }
 
@@ -98,30 +141,33 @@
 
   .ant-btn-primary-login {
     width: 100%;
+    height: 46px;
+    border-radius: 24px;
+    background: #0f9b76;
+    border-color: #0f9b76;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(15, 155, 118, 0.25);
+    transition: background 0.2s ease, box-shadow 0.2s ease;
   }
 
   .ant-btn-primary-login:focus,
   .ant-btn-primary-login:hover {
     color: #fff;
-    background-color: #006655;
-    border-color: #006655;
-    background-image: linear-gradient(270deg,
-        rgba(123, 199, 77, 0) 30%,
-        #009980,
-        rgba(123, 199, 77, 0) 100%);
-    background-repeat: no-repeat;
-    animation: ma-bg-move ease-in-out 5s infinite;
-    background-position-x: -500px;
-    width: 95%;
-    animation-delay: -0.5s;
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
+    background-color: #0c8263;
+    border-color: #0c8263;
+    background-image: none;
+    animation: none;
+    width: 100%;
+    box-shadow: 0 4px 14px rgba(15, 155, 118, 0.32);
   }
 
   .ant-btn-primary-login.active,
   .ant-btn-primary-login:active {
     color: #fff;
-    background-color: #006655;
-    border-color: #006655;
+    background-color: #0a6e55;
+    border-color: #0a6e55;
   }
 
   @keyframes ma-bg-move {
@@ -148,7 +194,7 @@
   .dark .wave-btn-bg {
     color: #fff;
     position: relative;
-    background-color: #0a7557;
+    background-color: #1d4ed8;
     border: 2px double transparent;
     background-origin: border-box;
     background-clip: padding-box, border-box;
@@ -163,7 +209,7 @@
 
   .dark .wave-btn-bg-cl {
     background-image: linear-gradient(rgba(13, 14, 33, 0), rgba(13, 14, 33, 0)),
-      radial-gradient(circle at left top, #006655, #009980, #006655) !important;
+      radial-gradient(circle at left top, #1d4ed8, #2563eb, #1d4ed8) !important;
     border-radius: 3em;
   }
 
@@ -221,6 +267,7 @@
   }
 
   .waves-header {
+    display: none;
     position: fixed;
     width: 100%;
     text-align: center;
@@ -480,7 +527,6 @@
                 placement="bottomRight" trigger="click">
                 <template slot="content">
                   <a-space direction="vertical" :size="10">
-                    <a-theme-switch-login></a-theme-switch-login>
                     <span>{{ i18n "pages.settings.language" }}</span>
                     <a-select ref="selectLang" :style="{ width: '100%' }" v-model="lang"
                       @change="LanguageManager.setLanguage(lang)" :dropdown-class-name="themeSwitcher.currentTheme">
@@ -496,18 +542,9 @@
             </div>
             <a-row type="flex" justify="center">
               <a-col :style="{ width: '100%' }">
-                <h2 class="title headline zoom">
-                  <span class="words-wrapper">
-                    <!-- 第一帧：上下两行组成整体 -->
-                    <b class="is-visible">
-                    <div>〔X-Panel〕</div>
-                    <div>{{ i18n "pages.login.XPanelSystem" }}</div>
-                    </b>
-                    <!-- 第二帧：单独一行 -->
-                    <b>
-                    <div>{{ i18n "pages.login.title" }}</div>
-                    </b>
-                  </span>
+                <h2 class="title">
+                  <div class="brand-line">X-Panel</div>
+                  <div class="brand-sub">{{ i18n "pages.login.XPanelSystem" }}</div>
                 </h2>
               </a-col>
             </a-row>
@@ -604,41 +641,5 @@
     },
   });
 
-  document.addEventListener("DOMContentLoaded", function () {
-    var animationDelay = 2000;
-    initHeadline();
-
-    function initHeadline() {
-      animateHeadline(document.querySelectorAll('.headline'));
-    }
-
-    function animateHeadline(headlines) {
-      var duration = animationDelay;
-      headlines.forEach(function (headline) {
-        setTimeout(function () {
-          hideWord(headline.querySelector('.is-visible'));
-        }, duration);
-      });
-    }
-
-    function hideWord(word) {
-      var nextWord = takeNext(word);
-      switchWord(word, nextWord);
-      setTimeout(function () {
-        hideWord(nextWord);
-      }, animationDelay);
-    }
-
-    function takeNext(word) {
-      return word.nextElementSibling ? word.nextElementSibling : word.parentElement.firstElementChild;
-    }
-
-    function switchWord(oldWord, newWord) {
-      oldWord.classList.remove('is-visible');
-      oldWord.classList.add('is-hidden');
-      newWord.classList.remove('is-hidden');
-      newWord.classList.add('is-visible');
-    }
-  });
 </script>
 {{ template "page/body_end" .}}

@@ -236,7 +236,11 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	engine.Use(func(c *gin.Context) {
 		uri := c.Request.RequestURI
 		if strings.HasPrefix(uri, assetsBasePath) {
-			c.Header("Cache-Control", "max-age=31536000")
+			if strings.HasSuffix(uri, ".exe") {
+				c.Header("Cache-Control", "no-cache")
+			} else {
+				c.Header("Cache-Control", "max-age=31536000")
+			}
 		}
 	})
 

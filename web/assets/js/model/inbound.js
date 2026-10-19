@@ -781,8 +781,8 @@ class RealityStreamSettings extends XrayCommonClass {
     constructor(
         show = false,
         xver = 0,
-        target = 'tesla.com:443',
-        serverNames = 'tesla.com,www.tesla.com',
+        target = 'www.athabascau.ca:443',
+        serverNames = 'www.athabascau.ca',
         privateKey = '',
         minClientVer = '',
         maxClientVer = '',

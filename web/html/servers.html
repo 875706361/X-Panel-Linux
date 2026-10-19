@@ -80,7 +80,7 @@
                                                 <a-icon type="plus"></a-icon> 添加〔被控端 VPS〕
                                             </a-button>
 
-                                            <a-button type="primary" style="cursor: default;">
+                                            <a-button style="cursor: default;">
                                                 <a-icon type="info-circle"></a-icon>
                                                 当前已绑定：[[ normalCount ]] 台 (最多可绑：[[ maxLimit ]] 台)
                                             </a-button>
@@ -89,7 +89,7 @@
                                                 刷新列表
                                             </a-button>
 
-                                            <a-button type="primary" icon="setting" @click="goToTgSettings">
+                                            <a-button icon="setting" @click="goToTgSettings">
                                                 配置本机"主控机器人"
                                             </a-button>
 
@@ -118,11 +118,11 @@
                                             远程Socks创建 --> 本机路由配置 --> 本机入口创建 --> 生成"二维码和链接"。
                                         </div>
                                         <a-space :size="15">
-                                            <a-button type="primary" @click="openAddModal(1)">
+                                            <a-button @click="openAddModal(1)">
                                                 <a-icon type="plus"></a-icon> 添加〔中转机 VPS〕
                                             </a-button>
 
-                                            <a-button type="primary" style="cursor: default;">
+                                            <a-button style="cursor: default;">
                                                 <a-icon type="info-circle"></a-icon>
                                                 当前已绑定：[[ transitCount ]] 台 (最多可绑：[[ maxLimit ]] 台)
                                             </a-button>
@@ -131,7 +131,7 @@
                                                 刷新列表
                                             </a-button>
 
-                                            <a-button type="primary" icon="thunderbolt" @click="openCheckModal">
+                                            <a-button icon="thunderbolt" @click="openCheckModal">
                                                 检测中转节点〔连通性〕
                                             </a-button>
                                         </a-space>
@@ -250,7 +250,7 @@
                 </span>
             </template>
             <template slot="action" slot-scope="text, record">
-                <a-button type="primary" size="small" ghost @click="performPing(record)" :loading="record.pingLoading">
+                <a-button size="small" @click="performPing(record)" :loading="record.pingLoading">
                     立即检测
                 </a-button>
             </template>

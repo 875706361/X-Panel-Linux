@@ -631,12 +631,12 @@ class CPUFormatter {
 
 class TimeFormatter {
     static formatSecond(second) {
-        if (second < 60) return second.toFixed(0) + 's';
-        if (second < 3600) return (second / 60).toFixed(0) + 'm';
-        if (second < 3600 * 24) return (second / 3600).toFixed(0) + 'h';
+        if (second < 60) return second.toFixed(0) + '秒';
+        if (second < 3600) return (second / 60).toFixed(0) + '分钟';
+        if (second < 3600 * 24) return (second / 3600).toFixed(0) + '小时';
         let day = Math.floor(second / 3600 / 24);
         let remain = ((second / 3600) - (day * 24)).toFixed(0);
-        return day + 'd' + (remain > 0 ? ' ' + remain + 'h' : '');
+        return day + '天' + (remain > 0 ? ' ' + remain + '小时' : '');
     }
 }
 

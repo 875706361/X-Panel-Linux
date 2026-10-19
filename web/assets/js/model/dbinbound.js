@@ -11,8 +11,8 @@ class DBInbound {
         this.enable = true;
         this.expiryTime = 0;
         
-      // 新增：入站级设备限制（0 表示不限制）
-        this.deviceLimit = 0;
+      // 新增：入站级设备限制（默认 3）
+        this.deviceLimit = 3;
 
         this.listen = "";
         this.port = 0;

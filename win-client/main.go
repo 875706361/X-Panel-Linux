@@ -1,3 +1,9 @@
+//go:build windows
+
+// 客户端 Win 版 v7.2：视觉打磨。按钮三态纯色化（渐变字段从未被渲染，删除），
+// 输入框聚焦描边变蓝，卡片/输入框/按钮底部阴影改三段渐淡（替代 3px 硬色带），
+// 标题栏去副标题与硬分割线，底栏硬线改两段渐淡，速度行降为中性灰。
+// 布局栅格与业务层（xray/系统代理/流量轮询）未动。
 package main
 
 import (
@@ -16,124 +22,176 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 	"unsafe"
 
-	_ "github.com/xtls/xray-core/main/distro/all"
 	core "github.com/xtls/xray-core/core"
+	_ "github.com/xtls/xray-core/main/distro/all"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
-var (
-	kernel32      = windows.NewLazySystemDLL("kernel32.dll")
-	procGetModule = kernel32.NewProc("GetModuleHandleW")
+const VER = "v7.2.0"
 
-	user32               = windows.NewLazySystemDLL("user32.dll")
-	procCreateWindow     = user32.NewProc("CreateWindowExW")
-	procDefWindow        = user32.NewProc("DefWindowProcW")
-	procRegisterClass    = user32.NewProc("RegisterClassExW")
-	procGetMessage       = user32.NewProc("GetMessageW")
-	procTranslate        = user32.NewProc("TranslateMessage")
-	procDispatch         = user32.NewProc("DispatchMessageW")
-	procSendMessage      = user32.NewProc("SendMessageW")
-	procSetWindowText    = user32.NewProc("SetWindowTextW")
-	procGetWindowText    = user32.NewProc("GetWindowTextW")
-	procPostQuit         = user32.NewProc("PostQuitMessage")
-	procInvalidate       = user32.NewProc("InvalidateRect")
-	procLoadIcon         = user32.NewProc("LoadIconW")
-	procBeginPaint       = user32.NewProc("BeginPaint")
-	procEndPaint         = user32.NewProc("EndPaint")
-	procShowWindow       = user32.NewProc("ShowWindow")
-	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
-	procDrawText         = user32.NewProc("DrawTextW")
-	procFillRect         = user32.NewProc("FillRect")
-	procScreenToClient   = user32.NewProc("ScreenToClient")
-	procDestroyWindow    = user32.NewProc("DestroyWindow")
-	procSetDPIAware      = user32.NewProc("SetProcessDPIAware")
-
-	gdi32            = windows.NewLazySystemDLL("gdi32.dll")
-	procCreateFont   = gdi32.NewProc("CreateFontW")
-	procCreateSolid  = gdi32.NewProc("CreateSolidBrush")
-	procSetTextColor = gdi32.NewProc("SetTextColor")
-	procSetBkColor   = gdi32.NewProc("SetBkColor")
-	procSetBkMode    = gdi32.NewProc("SetBkMode")
-	procRoundRect    = gdi32.NewProc("RoundRect")
-	procSelectObject = gdi32.NewProc("SelectObject")
-	procCreatePen    = gdi32.NewProc("CreatePen")
-	procDeleteObject = gdi32.NewProc("DeleteObject")
-	procMoveToEx     = gdi32.NewProc("MoveToEx")
-	procLineTo       = gdi32.NewProc("LineTo")
-
-	winInet         = windows.NewLazySystemDLL("wininet.dll")
-	procInternetSet = winInet.NewProc("InternetSetOptionW")
-
-	hwndMain windows.HWND
-	// Page 1 (Login)
-	hwndPage1Title, hwndPage1Sub, hwndEdit, hwndBtnLogin, hwndLoginTip windows.HWND
-	// Page 2 (Dashboard)
-	hwndStatus, hwndExpire, hwndLblTotal, hwndTraffic, hwndLblUp, hwndUp, hwndLblDown, hwndDown windows.HWND
-	hwndBtnConnect, hwndBtnSwitch, hwndFooterDesc                                                windows.HWND
-	// Shared
-	hwndSpeedBar windows.HWND
-
-	hFontAppTitle, hFontTitle, hFontSub, hFontEdit, hFontBtn, hFontStat, hFontVal, hFontBig, hFontMono uintptr
-	hBrushBg, hBrushCard, hBrushBar, hBrushEdit                                                        windows.Handle
-	hPenCard, hPenBorder                                                                               windows.Handle
-
-	currentPage = 1
-	xray_server *core.Instance
-	connected   bool
-	serverUUID  string
-	stateMu     sync.Mutex
-	busy        bool
-	speedUp, speedDown, lastUp, lastDown int64
+// 96dpi 逻辑设计稿：与 /root/preview/xpanel-fluent-v3.html 一比一对应
+const (
+	LWW, LWH     = 450, 560 // 窗口
+	LTITLE, LBAR = 48, 36   // 标题栏 / 底栏
+	LM           = 22       // 全局统一外边距
+	LCW          = LWW - 2*LM
+	LP           = 18 // page2 卡片内边距
+	LX0          = LM + LP
+	LXW          = LCW - 2*LP
 )
 
 const (
-	WS_POPUP       = 0x80000000
-	WS_VISIBLE     = 0x10000000
-	WS_CHILD       = 0x40000000
-	WS_MINIMIZEBOX = 0x00020000
-	BS_OWNERDRAW   = 0x0000000B
-	ES_MULTILINE   = 0x0004
-	ES_AUTOVSCROLL = 0x0040
-	WS_BORDER      = 0x00800000
+	// page1：导入节点。输入框直接坐 Mica 上，不再套卡片
+	P1TITLE_Y, P1SUB_Y = 70, 100 // 标题 / 副标题（标题栏 48 + 22）
+	EDIT_Y, EDIT_H     = 138, 224
+	BTN1_Y, BTN1_H     = 378, 48
+	TIP_Y              = 444
+	// page2：仪表盘。卡片高度按内容收紧
+	CARD2_Y, CARD2_H     = 62, 240
+	STATUS_Y             = 80
+	TOTAL_Y              = 112
+	TRAFFIC_Y            = 132
+	DIV_Y                = 196
+	COL_LBL_Y, COL_VAL_Y = 208, 230
+	BTN2_Y, BTN2_H       = 316, 48
+	BTN3_Y, BTN3_H       = 374, 48
+	FOOTER_Y             = 440
+)
 
-	WM_DESTROY        = 0x0002
-	WM_PAINT          = 0x000F
-	WM_COMMAND        = 0x0111
-	WM_DRAWITEM       = 0x002B
-	WM_SETFONT        = 0x0030
-	WM_CTLCOLORSTATIC = 0x0138
-	WM_CTLCOLOREDIT   = 0x0133
-	WM_NCHITTEST      = 0x0084
-	WM_SYSCOMMAND     = 0x0112
-	WM_LBUTTONDOWN    = 0x0201
-	SW_HIDE           = 0
-	SW_SHOW           = 5
-	HTCAPTION         = 2
+const (
+	CS_HREDRAW, CS_VREDRAW, CS_DBLCLKS, CS_DROPSHADOW = 0x1, 0x2, 0x8, 0x20000
+	WS_POPUP, WS_VISIBLE, WS_CHILD, WS_MINIMIZEBOX    = 0x80000000, 0x10000000, 0x40000000, 0x20000
+	WS_CLIPCHILDREN                                   = 0x02000000
+	ES_MULTILINE, ES_AUTOVSCROLL                      = 0x4, 0x40
+	BS_OWNERDRAW                                      = 0xB
+	SW_HIDE, SW_SHOW                                  = 0, 5
+	WM_DESTROY, WM_PAINT, WM_COMMAND, WM_DRAWITEM     = 0x2, 0xF, 0x111, 0x2B
+	WM_SETFONT, WM_CTLCOLORSTATIC, WM_CTLCOLOREDIT    = 0x30, 0x138, 0x133
+	EM_SETMARGINS, EC_LEFTMARGIN, EC_RIGHTMARGIN      = 0x00D3, 0x0001, 0x0002
 
-	// 紧凑黄金比例 450x490
-	WIN_W   = 450
-	WIN_H   = 490
-	TITLE_H = 46
-	BAR_H   = 36
+	WM_NCHITTEST, WM_SYSCOMMAND, WM_LBUTTONDOWN = 0x84, 0x112, 0x201
+	WM_LBUTTONUP, WM_CAPTURECHANGED             = 0x202, 0x215
+	HTCAPTION, SC_MINIMIZE                      = 2, 0xF020
+	DT_CENTER, DT_SINGLELINE, DT_WORDBREAK      = 0x1, 0x200, 0x10
+	GWLP_WNDPROC                                = -4
+)
 
-	// 浅色主题（COLORREF = 0x00BBGGRR，注意 BGR 字节序，勿按 #RRGGBB 直写）
-	CLR_BG        = 0xFAF9F8 // #F8F9FA
-	CLR_CARD      = 0xFFFFFF
-	CLR_BORDER    = 0xEBE7E5 // #E5E7EB
-	CLR_INPUT_BG  = 0xF6F4F3 // #F3F4F6
-	CLR_TXT_MAIN  = 0x271811 // #111827
-	CLR_TXT_MUTED = 0x80726B // #6B7280
-	CLR_TXT_FAINT = 0xAFA39C // #9CA3AF
-	CLR_ACCENT    = 0xFF765B // #5B76FF v2rayN 紫蓝
-	CLR_ACCENT_D  = 0xE85B47 // #475BE8
-	CLR_SUCCESS   = 0x81B910 // #10B981
-	CLR_DANGER    = 0x4444EF // #EF4444
-	CLR_BAR_BG    = 0xFFFFFF
+// ---------- Fluent 主题 ----------
+// COLORREF = 0x00BBGGRR。配色直接取自设计稿 v3，不再沿用 v6 的湛蓝。
+const (
+	CLR_ACCENT   = 0xD47800 // #0078D4 (Fluent 蓝，BGR)
+	CLR_ACCENT_H = 0xBE6E10 // #106EBE hover
+	CLR_ACCENT_P = 0x9E5A00 // #005A9E pressed
+	CLR_DANGER   = 0x1B2BC4 // #C42B1C (Fluent 红)
+	CLR_DANGER_H = 0x1B27B0 // #B3271B
+	CLR_SUCCESS  = 0x43A02E // #2EA043
+	CLR_IDLE     = 0x8A8A8A
 
-	PANEL_BASE = "http://67.215.255.156:13688"
+	CLR_TXT   = 0x1A1A1A
+	CLR_MUTED = 0x5F5F5F
+	CLR_FAINT = 0x6E6E6E
+
+	// Mica 基底：Win10 1607 以下退回这个色
+	CLR_BASE = 0xF3F4F7
+	// page2 卡片：比 v6 更通透，是半透明白叠在 Mica 上的视觉等价色
+	CLR_CARD   = 0xF7F8FB
+	CLR_CARD_B = 0xE3E6EC // 卡片细描边
+	// 输入框：微弱内凹
+	CLR_INPUT   = 0xFFFFFF
+	CLR_INPUT_B = 0xD2D5DB
+)
+
+// DwmSetWindowAttribute：Win11 圆角
+const DWMWA_WINDOW_CORNER_PREFERENCE = 33 // 2 = round
+
+func applyRoundCorners(h windows.HWND) {
+	if err := dwmapi.Load(); err != nil {
+		return // Win10 及以下没有 dwmapi 导出，静默跳过
+	}
+	pref := uintptr(2)
+	pDwmSetWindowAttr.Call(uintptr(h), DWMWA_WINDOW_CORNER_PREFERENCE, uintptr(unsafe.Pointer(&pref)), 4)
+}
+
+const PANEL_BASE = "http://67.215.255.156:13688"
+
+var (
+	dwmapi            = windows.NewLazySystemDLL("dwmapi.dll")
+	pDwmSetWindowAttr = dwmapi.NewProc("DwmSetWindowAttribute")
+
+	user32   = windows.NewLazySystemDLL("user32.dll")
+	gdi32    = windows.NewLazySystemDLL("gdi32.dll")
+	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
+	wininet  = windows.NewLazySystemDLL("wininet.dll")
+
+	pLoadCursor  = user32.NewProc("LoadCursorW")
+	pSetCursor   = user32.NewProc("SetCursor")
+	hCursorHand  uintptr
+	hCursorArrow uintptr
+
+	pSetWindowLong  = user32.NewProc("SetWindowLongPtrW")
+	pCallWindowProc = user32.NewProc("CallWindowProcW")
+
+	hoverMin   bool
+	hoverClose bool
+	hoverBtn   windows.HWND
+	pressBtn   windows.HWND // 鼠标左键当前按在哪颗按钮上（0=没按）
+	pressTitle int8         // 0=无 1=最小化 2=关闭
+)
+
+var (
+	pCreateWindowEx = user32.NewProc("CreateWindowExW")
+	pDefWindowProc  = user32.NewProc("DefWindowProcW")
+	pRegisterClass  = user32.NewProc("RegisterClassExW")
+	pGetMessage     = user32.NewProc("GetMessageW")
+	pTranslateMsg   = user32.NewProc("TranslateMessage")
+	pDispatchMsg    = user32.NewProc("DispatchMessageW")
+	pSendMessage    = user32.NewProc("SendMessageW")
+	pSetWindowText  = user32.NewProc("SetWindowTextW")
+	pGetWindowText  = user32.NewProc("GetWindowTextW")
+	pPostQuit       = user32.NewProc("PostQuitMessage")
+	pInvalidate     = user32.NewProc("InvalidateRect")
+	pTrackMouse     = user32.NewProc("TrackMouseEvent")
+	pLoadIcon       = user32.NewProc("LoadIconW")
+	pBeginPaint     = user32.NewProc("BeginPaint")
+	pEndPaint       = user32.NewProc("EndPaint")
+	pShowWindow     = user32.NewProc("ShowWindow")
+	pGetSysMetrics  = user32.NewProc("GetSystemMetrics")
+	pGetWindowRect  = user32.NewProc("GetWindowRect")
+	pDrawText       = user32.NewProc("DrawTextW")
+	pFillRect       = user32.NewProc("FillRect")
+	pScreenToClient = user32.NewProc("ScreenToClient")
+	pDestroyWindow  = user32.NewProc("DestroyWindow")
+	pSetProcessDPI  = user32.NewProc("SetProcessDPIAware")
+	pGetDpiForWin   = user32.NewProc("GetDpiForWindow")
+	pMoveWindow     = user32.NewProc("MoveWindow")
+	pGetCursorPos   = user32.NewProc("GetCursorPos")
+	pSetCapture     = user32.NewProc("SetCapture")
+	pReleaseCapture = user32.NewProc("ReleaseCapture")
+
+	pCreateFont    = gdi32.NewProc("CreateFontW")
+	pCreateSolid   = gdi32.NewProc("CreateSolidBrush")
+	pGetStockObj   = gdi32.NewProc("GetStockObject")
+	pSetTextColor  = gdi32.NewProc("SetTextColor")
+	pSetBkColor    = gdi32.NewProc("SetBkColor")
+	pSetBkMode     = gdi32.NewProc("SetBkMode")
+	pRoundRect     = gdi32.NewProc("RoundRect")
+	pSelectObject  = gdi32.NewProc("SelectObject")
+	pCreatePen     = gdi32.NewProc("CreatePen")
+	pDeleteObject  = gdi32.NewProc("DeleteObject")
+	pMoveToEx      = gdi32.NewProc("MoveToEx")
+	pLineTo        = gdi32.NewProc("LineTo")
+	pGetTextExtent = gdi32.NewProc("GetTextExtentPoint32W")
+	pEllipse       = gdi32.NewProc("Ellipse")
+
+	// 按钮客户区矩形：invalidateSelf 用
+	pGetClientRect = user32.NewProc("GetClientRect")
+
+	pGetModule   = kernel32.NewProc("GetModuleHandleW")
+	pInternetSet = wininet.NewProc("InternetSetOptionW")
 )
 
 type WNDCLASSEX struct {
@@ -163,11 +221,13 @@ type MSG struct {
 type PAINTSTRUCT struct {
 	Hdc         uintptr
 	FErase      int32
-	RcPaint     struct{ Left, Top, Right, Bottom int32 }
+	RcPaint     RECT
 	FRestore    int32
 	FIncUpdate  int32
 	RgbReserved [32]byte
 }
+
+type RECT struct{ L, T, R, B int32 }
 
 type DRAWITEMSTRUCT struct {
 	CtlType    uint32
@@ -177,257 +237,748 @@ type DRAWITEMSTRUCT struct {
 	ItemState  uint32
 	HwndItem   windows.HWND
 	HDC        uintptr
-	RcItem     struct{ Left, Top, Right, Bottom int32 }
+	RcItem     RECT
 	ItemData   uintptr
 }
 
-func setSystemProxy(enable bool, proxyAddr string) {
-	log.Printf("[PROXY] 配置系统代理开关: enable=%v, addr=%s", enable, proxyAddr)
-	k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Internet Settings`, registry.SET_VALUE)
-	if err != nil {
-		log.Printf("[PROXY] [ERROR] 打开注册表失败: %v", err)
+var (
+	dpiScale float64 = 1.0
+	hwndMain windows.HWND
+
+	page       int // 1=导入节点 2=仪表盘
+	connected  bool
+	serverUUID string
+	xray       *core.Instance
+	stateMu    sync.Mutex
+	busy       bool
+
+	speedUp, speedDown, lastUp, lastDown int64
+
+	// page1
+	hTitle1, hSub1, hEdit, hBtnLogin, hTip windows.HWND
+	// page2
+	hStatus, hExpire, hLblTotal, hTraffic, hLblUp, hUp, hLblDown, hDown windows.HWND
+	hBtnConn, hBtnSwitch, hFooter                                       windows.HWND
+	// shared
+	hSpeed windows.HWND
+
+	fAppTitle, fTitle, fSub, fEdit, fBtn, fStat, fVal, fBig, fMono uintptr
+	brBase, brCard, brInput                                        windows.Handle
+
+	page1 = []*windows.HWND{}
+	page2 = []*windows.HWND{}
+)
+
+// S 把逻辑像素换算为物理像素
+func S(v int) int32 { return int32(float64(v)*dpiScale + 0.5) }
+
+func createFont(logical int, bold bool, name string) uintptr {
+	weight := uintptr(400)
+	if bold {
+		weight = 700
+	}
+	h, _, _ := pCreateFont.Call(
+		uintptr(S(logical)), 0, 0, 0, weight, 0, 0, 0,
+		1 /*DEFAULT_CHARSET*/, 0, 0, 0, 0,
+		uintptr(unsafe.Pointer(mustU16(name))))
+	return h
+}
+
+func mustU16(s string) *uint16 { p, _ := windows.UTF16PtrFromString(s); return p }
+
+// DrawTextW / GetTextExtentPoint32W 收的是 UTF-16 单元数，不是 UTF-8 字节数。
+// 中文按钮文案用 len() 会多算近一倍，文字宽度量错导致整体偏移。
+func u16Len(s string) int32 { return int32(len(utf16.Encode([]rune(s)))) }
+
+// ---------- 控件工厂：栅格只出现一次，杜绝手写坐标 ----------
+
+func mkStatic(text string, lx, ly, lw, lh int, font uintptr) windows.HWND {
+	t := mustU16(text)
+	r, _, _ := pCreateWindowEx.Call(0, uintptr(unsafe.Pointer(mustU16("STATIC"))), uintptr(unsafe.Pointer(t)),
+		WS_CHILD, uintptr(S(lx)), uintptr(S(ly)), uintptr(S(lw)), uintptr(S(lh)),
+		uintptr(hwndMain), 0, 0, 0)
+	pSendMessage.Call(r, WM_SETFONT, font, 1)
+	return windows.HWND(r)
+}
+
+func mkButton(text string, lx, ly, lw, lh int) windows.HWND {
+	t := mustU16(text)
+	r, _, _ := pCreateWindowEx.Call(0, uintptr(unsafe.Pointer(mustU16("BUTTON"))), uintptr(unsafe.Pointer(t)),
+		WS_CHILD|BS_OWNERDRAW, uintptr(S(lx)), uintptr(S(ly)), uintptr(S(lw)), uintptr(S(lh)),
+		uintptr(hwndMain), 0, 0, 0)
+	// 悬浮/手型光标 subclass：所有按钮共用一个 wndproc
+	h := windows.HWND(r)
+	// GWLP_WNDPROC = -4，先存变量再转 uintptr，否则常量转换报溢出
+	nidx := int32(GWLP_WNDPROC)
+	op, _, _ := pSetWindowLong.Call(uintptr(h), uintptr(nidx), uintptr(windows.NewCallback(btnSubclass)))
+	btnOrigProcs[h] = op
+	return h
+}
+
+func mkEdit(lx, ly, lw, lh int) windows.HWND {
+	// ponytail: 不用 ES_PASSWORD——多行密码框会吃掉 WM_SETCURSOR 复位，导致光标卡在手型不复位
+	r, _, _ := pCreateWindowEx.Call(0, uintptr(unsafe.Pointer(mustU16("EDIT"))), 0,
+		WS_CHILD|ES_MULTILINE|ES_AUTOVSCROLL,
+		// 控件四周各让 1px 缝给父窗口自绘描边：左右是 x/宽，上下是 y/高。
+		// EDIT 是不透明子窗口，上下不让缝就会盖掉描边的顶/底边（老 bug：输入框只有左右两条边线）。
+		uintptr(S(lx)+S(1)), uintptr(S(ly)+S(1)), uintptr(S(lw)-S(2)), uintptr(S(lh)-S(2)),
+		uintptr(hwndMain), 0, 0, 0)
+	pSendMessage.Call(r, WM_SETFONT, fEdit, 1)
+	// 输入区左右内边距：文本不贴灰框边缘
+	pSendMessage.Call(r, EM_SETMARGINS, EC_LEFTMARGIN|EC_RIGHTMARGIN, uintptr(S(14))|uintptr(S(14))<<16)
+	// 挂子类：鼠标在编辑框上移动时，主窗口收不到消息，hover 高亮会粘住不放
+	h := windows.HWND(r)
+	nidx := int32(GWLP_WNDPROC)
+	op, _, _ := pSetWindowLong.Call(uintptr(h), uintptr(nidx), uintptr(windows.NewCallback(editSubclassProc)))
+	editOrigProc = op
+	return h
+}
+
+func setText(h windows.HWND, s string) {
+	pSetWindowText.Call(uintptr(h), uintptr(unsafe.Pointer(mustU16(s))))
+}
+func getText(h windows.HWND) string {
+	var buf [8192]uint16
+	pGetWindowText.Call(uintptr(h), uintptr(unsafe.Pointer(&buf[0])), 8192)
+	return windows.UTF16ToString(buf[:])
+}
+
+// ---------- 绘制基件 ----------
+
+func fillRect(hdc uintptr, r *RECT, clr uint32) {
+	b, _, _ := pCreateSolid.Call(uintptr(clr))
+	pFillRect.Call(hdc, uintptr(unsafe.Pointer(r)), b)
+	pDeleteObject.Call(b)
+}
+
+func mkPen(clr uint32) uintptr {
+	p, _, _ := pCreatePen.Call(0, 1, uintptr(clr))
+	return p
+}
+func mkb(clr uint32) windows.Handle {
+	r, _, _ := pCreateSolid.Call(uintptr(clr))
+	return windows.Handle(r)
+}
+
+// 画一个纯色实心小圆，用于状态指示点。
+// ● 字符在不同字体里大小位置都不一样，自绘才能保证像素级对齐。
+func dot(hdc uintptr, cx, cy, r int32, clr uint32) {
+	// Ellipse 会用 DC 当前笔画轮廓（默认 BLACK_PEN），必须换成 NULL_PEN
+	// 只留刷子填充，否则状态点外圈永远套一圈黑线。
+	np, _, _ := pGetStockObj.Call(8) // NULL_PEN
+	onp, _, _ := pSelectObject.Call(hdc, np)
+	br, _, _ := pCreateSolid.Call(uintptr(clr))
+	ob, _, _ := pSelectObject.Call(hdc, br)
+	pEllipse.Call(hdc, uintptr(cx-r), uintptr(cy-r), uintptr(cx+r+1), uintptr(cy+r+1))
+	pSelectObject.Call(hdc, ob, 0)
+	pSelectObject.Call(hdc, onp, 0)
+	pDeleteObject.Call(br)
+}
+
+// 三段渐淡的软阴影：贴在元素下缘，只往下不出左右头。
+// 1px 硬色带在浅底上是一条「脏线」，三段过渡才是「浮起」。
+func softShadow(hdc uintptr, x, y, w int32) {
+	fillRect(hdc, &RECT{x, y, x + w, y + 1}, 0xEDEFF3) // #F3EFED
+	fillRect(hdc, &RECT{x, y + 1, x + w, y + 2}, 0xE9EBF0)
+	fillRect(hdc, &RECT{x, y + 2, x + w, y + 3}, 0xE2E5EA) // #EAE5E2
+}
+
+// 整个窗口只有一个地方决定光标形状：手型覆盖在可交互元素上，其余一律箭头。
+// 各处分散 SetCursor 会导致离开热区后光标不复位。
+var hoverPointed bool // 当前是否处于手型区域（按钮/标题栏按钮）
+
+func applyCursor() {
+	want := hoverBtn != 0 || hoverMin || hoverClose
+	if want == hoverPointed {
 		return
 	}
-	defer k.Close()
-	if enable {
-		if err := k.SetDWordValue("ProxyEnable", 1); err != nil {
-			log.Printf("[PROXY] [ERROR] 写入 ProxyEnable 失败: %v", err)
+	hoverPointed = want
+	if want {
+		if hCursorHand != 0 {
+			pSetCursor.Call(hCursorHand)
 		}
-		if err := k.SetStringValue("ProxyServer", proxyAddr); err != nil {
-			log.Printf("[PROXY] [ERROR] 写入 ProxyServer 失败: %v", err)
+	} else if hCursorArrow != 0 {
+		pSetCursor.Call(hCursorArrow)
+	}
+}
+
+// ---------- 鼠标日志 ----------
+// 坐标全部是相对按钮客户区的物理像素。移动事件做 16px 网格去重，避免刷屏。
+var lastMoveLog windows.HWND
+var lastMoveX, lastMoveY int32
+
+func mouseLog(h windows.HWND, what string, lParam uintptr) {
+	x := int32(int16(lParam & 0xFFFF))
+	y := int32(int16(lParam >> 16))
+	if what == "移动" {
+		if h == lastMoveLog && x>>4 == lastMoveX>>4 && y>>4 == lastMoveY>>4 {
+			return
 		}
-		if err := k.SetStringValue("ProxyOverride", "localhost;127.*;10.*;192.168.*;<local>"); err != nil {
-			log.Printf("[PROXY] [ERROR] 写入 ProxyOverride 失败: %v", err)
-		}
+		lastMoveLog, lastMoveX, lastMoveY = h, x, y
 	} else {
-		if err := k.SetDWordValue("ProxyEnable", 0); err != nil {
-			log.Printf("[PROXY] [ERROR] 禁用 ProxyEnable 失败: %v", err)
+		lastMoveLog = 0
+	}
+	log.Printf("[MOUSE] %s 按钮=%s HWND=0x%x 坐标=(%d,%d)", what, btnName(h), uintptr(h), x, y)
+}
+
+// 按钮在主窗口客户区里的逻辑矩形，创建时登记一次。
+type rectSpec struct {
+	h            windows.HWND
+	x, y, w, hgt int
+}
+
+var btnRects []rectSpec
+
+// 主窗口坐标 → 命中的按钮（不在任何按钮上返回 0）。
+// 不查子窗口，因为子窗口被隐藏（切页）时 GetWindowRect 仍返回旧位置。
+func btnAt(x, y int32) windows.HWND {
+	for _, r := range btnRects {
+		visible := false
+		if page == 1 && r.h == hBtnLogin {
+			visible = true
+		}
+		if page == 2 && (r.h == hBtnConn || r.h == hBtnSwitch) {
+			visible = true
+		}
+		if !visible {
+			continue
+		}
+		if x >= S(r.x) && x < S(r.x+r.w) && y >= S(r.y) && y < S(r.y+r.hgt) {
+			return r.h
 		}
 	}
-	procInternetSet.Call(0, 39, 0, 0)
-	procInternetSet.Call(0, 37, 0, 0)
-	log.Printf("[PROXY] 系统代理生效设置完成")
+	return 0
 }
 
-func switchPage(page int) {
-	log.Printf("[UI] 页面切换 -> Page %d", page)
-	currentPage = page
-	show1, show2 := SW_HIDE, SW_HIDE
-	if page == 1 {
-		show1 = SW_SHOW
-	} else {
-		show2 = SW_SHOW
+// hover 变化的唯一入口：旧按钮重绘掉高亮，新按钮重绘上高亮。
+func setHoverBtn(h windows.HWND) {
+	if h == hoverBtn {
+		return
 	}
-	for _, h := range []windows.HWND{hwndPage1Title, hwndPage1Sub, hwndEdit, hwndBtnLogin, hwndLoginTip} {
-		procShowWindow.Call(uintptr(h), uintptr(show1))
+	if hoverBtn != 0 {
+		invalidateSelf(hoverBtn)
 	}
-	for _, h := range []windows.HWND{hwndStatus, hwndExpire, hwndLblTotal, hwndTraffic, hwndLblUp, hwndUp, hwndLblDown, hwndDown, hwndBtnConnect, hwndBtnSwitch, hwndFooterDesc} {
-		procShowWindow.Call(uintptr(h), uintptr(show2))
+	hoverBtn = h
+	if h != 0 {
+		invalidateSelf(h)
 	}
-	procInvalidate.Call(uintptr(hwndMain), 0, 1)
 }
 
-func paintCard(hdc uintptr, x, y, w, h int32, radius int32) {
-	// 双层柔和阴影，营造悬浮立体卡片质感
-	s1, _, _ := procCreateSolid.Call(uintptr(0xF5F1EF)) // #EFF1F5 阴影
-	var sr1 struct{ L, T, R, B int32 }
-	sr1.L, sr1.T, sr1.R, sr1.B = x-1, y+h, x+w+1, y+h+4
-	procFillRect.Call(hdc, uintptr(unsafe.Pointer(&sr1)), s1)
-	procDeleteObject.Call(s1)
+// 编辑框也是子窗口：鼠标在上面移动时主窗口收不到 WM_MOUSEMOVE，
+// hover 高亮会粘住不放。这里把坐标换算到主窗口客户区后走同一条 setHoverBtn。
+var editOrigProc uintptr
+var editFocused bool // 输入框聚焦时描边变 accent，给键入位置一个可见落点
 
-	s2, _, _ := procCreateSolid.Call(uintptr(0xF0E8E5)) // #E5E8F0 阴影
-	var sr2 struct{ L, T, R, B int32 }
-	sr2.L, sr2.T, sr2.R, sr2.B = x, y+h, x+w, y+h+2
-	procFillRect.Call(hdc, uintptr(unsafe.Pointer(&sr2)), s2)
-	procDeleteObject.Call(s2)
-
-	brushRaw, _, _ := procCreateSolid.Call(uintptr(CLR_CARD))
-	oldB, _, _ := procSelectObject.Call(hdc, brushRaw)
-	oldP, _, _ := procSelectObject.Call(hdc, uintptr(hPenCard))
-	procRoundRect.Call(hdc, uintptr(x), uintptr(y), uintptr(x+w), uintptr(y+h), uintptr(radius), uintptr(radius))
-	procSelectObject.Call(hdc, oldB)
-	procSelectObject.Call(hdc, oldP)
-	procDeleteObject.Call(brushRaw)
+func editSubclassProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
+	switch msg {
+	case 0x0200, 0x02A3: // WM_MOUSEMOVE / WM_MOUSELEAVE
+		var rc, mc RECT
+		pGetWindowRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&rc)))
+		pGetWindowRect.Call(uintptr(hwndMain), uintptr(unsafe.Pointer(&mc)))
+		px := int32(int16(lParam&0xFFFF)) + rc.L - mc.L
+		py := int32(int16(lParam>>16)) + rc.T - mc.T
+		if msg == 0x02A3 {
+			px, py = -1, -1
+		}
+		setHoverBtn(btnAt(px, py))
+		applyCursor()
+	case 0x0007, 0x0008: // WM_SETFOCUS / WM_KILLFOCUS
+		editFocused = msg == 0x0007
+		// 输入框矩形整条 invalidate，让 paint() 重画描边
+		pInvalidate.Call(uintptr(hwndMain), uintptr(unsafe.Pointer(&RECT{S(LM), S(EDIT_Y), S(LM + LCW), S(EDIT_Y + EDIT_H) + S(3)})), 1)
+	}
+	r, _, _ := pCallWindowProc.Call(editOrigProc, uintptr(hwnd), uintptr(msg), wParam, lParam)
+	return r
 }
 
-func paintStatusBarBg(hdc uintptr) {
-	brushRaw, _, _ := procCreateSolid.Call(uintptr(CLR_BAR_BG))
-	var r struct{ L, T, R, B int32 }
-	r.L, r.T, r.R, r.B = 0, WIN_H-BAR_H, WIN_W, WIN_H
-	procFillRect.Call(hdc, uintptr(unsafe.Pointer(&r)), brushRaw)
-	procDeleteObject.Call(brushRaw)
-
-	pen, _, _ := procCreatePen.Call(0, 1, uintptr(CLR_BORDER))
-	oldP, _, _ := procSelectObject.Call(hdc, pen)
-	procMoveToEx.Call(hdc, 0, WIN_H-BAR_H, 0)
-	procLineTo.Call(hdc, WIN_W, WIN_H-BAR_H)
-	procSelectObject.Call(hdc, oldP)
-	procDeleteObject.Call(pen)
+func btnName(h windows.HWND) string {
+	switch h {
+	case hBtnLogin:
+		return "登录节点"
+	case hBtnConn:
+		return "启动加速"
+	case hBtnSwitch:
+		return "更换节点"
+	}
+	return "?"
 }
 
-// 现代化拟态/扁平质感自绘按钮：带按压反馈、高对比度与圆角
+// 鼠标是否落在标题栏按钮区（坐标相对主窗口客户区）
+func titleBtnAt(x, y int32) (min, close bool) {
+	WW := S(LWW)
+	return y < S(LTITLE) && x >= WW-S(88) && x < WW-S(44),
+		y < S(LTITLE) && x >= WW-S(44)
+}
+
+// logTitleMouse 记录标题栏按钮的鼠标事件，坐标是相对主窗口客户区
+func logTitleMouse(what string, x, y int32) {
+	min, close := titleBtnAt(x, y)
+	name := "窗口区"
+	if close {
+		name = "关闭"
+	} else if min {
+		name = "最小化"
+	}
+	log.Printf("[MOUSE] %s 标题栏=%s 坐标=(%d,%d)", what, name, x, y)
+}
+
+// ---------- 按钮交互 ----------
+
+func btnSubclass(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
+	switch msg {
+	case 0x000F: // WM_PAINT —— 整个按钮自绘，绝不放给标准 BUTTON 类
+		// 标准 BUTTON 类在 WM_PAINT 里会先用 COLOR_BTNFACE 刷一遍原生脸，
+		// 而且这条路径下它的刷脸时机不受 owner-draw 控制（实测 Wine 上刷在
+		// WM_DRAWITEM 之后），结果就是点击后按钮被原生灰盖掉、只剩描边。
+		// 稳妥做法：直接在子类里 BeginPaint → 自绘 → EndPaint，压根不给原生机会。
+		var ps PAINTSTRUCT
+		hdc, _, _ := pBeginPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
+		var rc RECT
+		pGetClientRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&rc)))
+		drawFlatButton(&DRAWITEMSTRUCT{
+			CtlType:  4, // ODT_BUTTON
+			HwndItem: hwnd,
+			HDC:      hdc,
+			RcItem:   rc,
+		})
+		pEndPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
+		return 0
+	case 0x0014: // WM_ERASEBKGND
+		// 标准 BUTTON 类会用 COLOR_BTNFACE 擦背景，这一刷正好是系统按钮灰。
+		// 整个按钮都是 owner-draw 自绘的，一行原生像素都不该有，否则点击后
+		// 会出现「刷了灰但 WM_DRAWITEM 没跟着来」→ 按钮卡在白底蓝边。
+		return 1 // 1 = 已处理，不擦背景
+	case 0x0020: // WM_SETCURSOR
+		applyCursor()
+		return 1
+	case 0x0200: // WM_MOUSEMOVE
+		if hoverBtn != hwnd {
+			hoverBtn = hwnd
+			invalidateSelf(hwnd)
+			tme := struct {
+				cbSize, dwFlags uint32
+				hwndTrack       windows.HWND
+				dwHoverTime     uint32
+			}{16, 0x2, hwnd, 0}
+			pTrackMouse.Call(uintptr(unsafe.Pointer(&tme)))
+		}
+		mouseLog(hwnd, "移动", lParam)
+	case 0x0201: // WM_LBUTTONDOWN：按在按钮上，接管 capture，松手前一直收得到鼠标
+		pressBtn = hwnd
+		pSetCapture.Call(uintptr(hwnd))
+		invalidateSelf(hwnd)
+		mouseLog(hwnd, "按下", lParam)
+	case 0x0202: // WM_LBUTTONUP
+		clicked := pressBtn == hwnd
+		pressBtn = 0
+		pReleaseCapture.Call()
+		invalidateSelf(hwnd)
+		mouseLog(hwnd, "松开", lParam)
+		if clicked {
+			mouseLog(hwnd, "点击", lParam)
+		}
+	case 0x0215: // WM_CAPTURECHANGED：capture 被系统夺走（点击窗口外/弹窗）
+		log.Printf("[MOUSE] CAPTURECHANGED 按钮=%s HWND=0x%x 新capture=0x%x", btnName(hwnd), uintptr(hwnd), lParam)
+		pressBtn = 0
+	case 0x02A3: // WM_MOUSELEAVE
+		if hoverBtn == hwnd {
+			hoverBtn = 0
+			invalidateSelf(hwnd)
+		}
+		applyCursor()
+	}
+	r, _, _ := pCallWindowProc.Call(btnOrigProcs[hwnd], uintptr(hwnd), uintptr(msg), wParam, lParam)
+	return r
+}
+
+// btnStyle 定义一套按钮视觉样式；所有按钮共用同一套渲染路径，杜绝重复 switch。
+type btnStyle struct {
+	fill, hover, press uint32 // 三态纯色（v7.1 的渐变字段从未被渲染，删除）
+	border, txt        uint32
+	font               uintptr
+}
+
+// 样式表：hover/press 统一在此定义，改主题只动这里。
+var btnStyles = map[windows.HWND]btnStyle{}
+
+// 每颗按钮 subclass 前的原 wndproc，回调用
+var btnOrigProcs = map[windows.HWND]uintptr{}
+
+// 已连接时“启动加速”变为“断开连接”：红色（危险操作）
+func btnStyleFor(h windows.HWND, connected bool) btnStyle {
+	st := btnStyles[h]
+	if h == hBtnConn && connected {
+		st = btnStyle{
+			fill: CLR_DANGER, hover: CLR_DANGER_H, press: CLR_DANGER_H,
+			border: CLR_DANGER, txt: 0xFFFFFF, font: st.font,
+		}
+	}
+	return st
+}
+
+// Fluent 按钮渲染：渐变底 + 1px 内描边 + 顶部高光，三层做出微凸起。
 func drawFlatButton(dis *DRAWITEMSTRUCT) {
-	var text [256]uint16
-	procGetWindowText.Call(uintptr(dis.HwndItem), uintptr(unsafe.Pointer(&text[0])), 256)
-	label := windows.UTF16ToString(text[:])
+	label := getText(dis.HwndItem)
+	log.Printf("[BTN_RENDER] 按钮=%s HWND=0x%x 宽度=%d 高度=%d 矩形=(%d,%d,%d,%d) scale=%.2f 状态[hover=%v press=%v]",
+		label, dis.HwndItem, dis.RcItem.R-dis.RcItem.L, dis.RcItem.B-dis.RcItem.T,
+		dis.RcItem.L, dis.RcItem.T, dis.RcItem.R, dis.RcItem.B, dpiScale,
+		hoverBtn == dis.HwndItem, pressBtn == dis.HwndItem)
 
-	fill, border, txt := uint32(CLR_ACCENT), uint32(CLR_ACCENT), uint32(0xFFFFFF)
-	font := hFontBtn
-	radius := int32(10)
-
-	switch dis.HwndItem {
-	case hwndBtnSwitch:
-		fill, border, txt = CLR_CARD, CLR_BORDER, CLR_TXT_MAIN
-		font = hFontStat
-	case hwndBtnConnect:
-		if connected {
-			fill, border = CLR_DANGER, CLR_DANGER
-		}
+	st := btnStyleFor(dis.HwndItem, connected)
+	fill, border, txt := st.fill, st.border, st.txt
+	if hoverBtn == dis.HwndItem {
+		fill, border = st.hover, st.hover
 	}
-
-	pressed := dis.ItemState&0x0200 != 0
-	if pressed {
-		switch dis.HwndItem {
-		case hwndBtnLogin, hwndBtnConnect:
-			if dis.HwndItem == hwndBtnConnect && connected {
-				fill = 0xC23540
-			} else {
-				fill = CLR_ACCENT_D
-			}
-			border = fill
-		case hwndBtnSwitch:
-			fill = 0xF1F3F7
-		}
+	press := pressBtn == dis.HwndItem
+	if press {
+		fill, border = st.press, st.press
 	}
 
 	hdc := dis.HDC
+	rc := dis.RcItem
+	d := S(8) // Fluent 按钮圆角 10px 设计稿，8px 更利落
 
-	// 未按下时为主按钮底部绘制轻微阴影，增加可点击质感
-	if !pressed && (dis.HwndItem == hwndBtnLogin || dis.HwndItem == hwndBtnConnect) {
-		btnShadow, _, _ := procCreateSolid.Call(uintptr(0xD0D7E5))
-		var bsr struct{ L, T, R, B int32 }
-		bsr.L, bsr.T, bsr.R, bsr.B = dis.RcItem.Left+2, dis.RcItem.Bottom-1, dis.RcItem.Right-2, dis.RcItem.Bottom+3
-		procFillRect.Call(hdc, uintptr(unsafe.Pointer(&bsr)), btnShadow)
-		procDeleteObject.Call(btnShadow)
+	// 两步画法，各用各的股件，任何一步都不留 DC 默认黑笔：
+	// 1) 实体填充内缩 1px，NULL_PEN（=8，无边框）+ 实心刷，纯填色；
+	// 2) 1px 描边画全矩形，HOLLOW_BRUSH（=5，真镂空）+ 边色笔，只留 1px 环。
+	// 旧写法两处都踩坑：CreateHatchBrush(1,0) 冒充 BS_NULL（参数其实是 HS_VERTICAL
+	// 竖纹样式，出来是黑纹刷）；填充步不换笔，DC 默认 BLACK_PEN 在 B-1 行漏一条黑线。
+	const HOLLOW_BRUSH, NULL_PEN = 5, 8
+	hb, _, _ := pGetStockObj.Call(HOLLOW_BRUSH)
+	np, _, _ := pGetStockObj.Call(NULL_PEN)
+	bb, _, _ := pCreateSolid.Call(uintptr(fill))
+	onp, _, _ := pSelectObject.Call(hdc, np)
+	ob, _, _ := pSelectObject.Call(hdc, bb)
+	pRoundRect.Call(hdc, uintptr(rc.L+S(1)), uintptr(rc.T+S(1)), uintptr(rc.R-S(1)), uintptr(rc.B-S(1)), uintptr(d), uintptr(d))
+	pSelectObject.Call(hdc, onp, 0)
+	pSelectObject.Call(hdc, ob, 0)
+
+	pen, _, _ := pCreatePen.Call(0, 1, uintptr(border))
+	op, _, _ := pSelectObject.Call(hdc, hb)
+	op2, _, _ := pSelectObject.Call(hdc, pen)
+	pRoundRect.Call(hdc, uintptr(rc.L), uintptr(rc.T), uintptr(rc.R), uintptr(rc.B), uintptr(d), uintptr(d))
+	pSelectObject.Call(hdc, op2)
+	pSelectObject.Call(hdc, op, 0)
+	pDeleteObject.Call(pen)
+	pDeleteObject.Call(bb)
+
+	// 顶部高光：按钮上缘 1px 亮线，Fluent 微凸起的核心。
+	if !press {
+		hl := RECT{rc.L + d/2, rc.T + 1, rc.R - d/2, rc.T + 2}
+		fillRect(hdc, &hl, 0x00F5E6D9) // #D9E6F5 上缘微亮白
 	}
 
-	brushRaw, _, _ := procCreateSolid.Call(uintptr(fill))
-	penRaw, _, _ := procCreatePen.Call(0, 1, uintptr(border))
-	oldB, _, _ := procSelectObject.Call(hdc, brushRaw)
-	oldP, _, _ := procSelectObject.Call(hdc, penRaw)
-	rc := dis.RcItem
-	procRoundRect.Call(hdc, uintptr(rc.Left), uintptr(rc.Top), uintptr(rc.Right), uintptr(rc.Bottom), uintptr(radius), uintptr(radius))
-	procSelectObject.Call(hdc, oldB)
-	procSelectObject.Call(hdc, oldP)
-	procDeleteObject.Call(brushRaw)
-	procDeleteObject.Call(penRaw)
+	// 焦点环：键盘 Tab 选中时画一圈内描边
+	if dis.ItemState&0x10 != 0 { // ODS_FOCUS
+		fp, _, _ := pCreatePen.Call(0, 1, uintptr(uint32(0xFFFFFF)))
+		ofp, _, _ := pSelectObject.Call(hdc, fp)
+		ir := rc
+		ir.L += S(3)
+		ir.R -= S(3)
+		ir.T += S(3)
+		ir.B -= S(3)
+		pRoundRect.Call(hdc, uintptr(ir.L), uintptr(ir.T), uintptr(ir.R), uintptr(ir.B), uintptr(d), uintptr(d))
+		pSelectObject.Call(hdc, ofp)
+		pDeleteObject.Call(fp)
+	}
 
-	procSetBkMode.Call(hdc, 1)
-	procSetTextColor.Call(hdc, uintptr(txt))
-	procSelectObject.Call(hdc, font)
-	ptr, _ := windows.UTF16PtrFromString(label)
-	procDrawText.Call(hdc, uintptr(unsafe.Pointer(ptr)), uintptr(len(label)), uintptr(unsafe.Pointer(&rc)), 0x25)
+	pSetBkMode.Call(hdc, 1)
+	pSetTextColor.Call(hdc, uintptr(txt))
+	pSelectObject.Call(hdc, st.font)
+	tp := mustU16(label)
+	// 垂直居中按实测字高算，不靠 DT_VCENTER（Wine 缺中文字体时它按错误行高对齐）。
+	w := u16Len(label)
+	var size struct{ Cx, Cy int32 }
+	pGetTextExtent.Call(hdc, uintptr(unsafe.Pointer(tp)), uintptr(w), uintptr(unsafe.Pointer(&size)))
+	tr := rc
+	if press {
+		// 1px tactile click offset
+		tr.T += S(1)
+		tr.B += S(1)
+	}
+	tr.T = (tr.T+tr.B-size.Cy)/2 + S(1) // 手写垂直居中，S(1) 是视觉补偿
+	tr.B = tr.T + size.Cy
+	pDrawText.Call(hdc, uintptr(unsafe.Pointer(tp)), uintptr(w), uintptr(unsafe.Pointer(&tr)), DT_CENTER|DT_SINGLELINE)
 }
 
-func paintTitleBar(hdc uintptr) {
-	tb, _, _ := procCreateSolid.Call(uintptr(CLR_CARD))
-	var tr struct{ L, T, R, B int32 }
-	tr.L, tr.T, tr.R, tr.B = 0, 0, WIN_W, TITLE_H
-	procFillRect.Call(hdc, uintptr(unsafe.Pointer(&tr)), tb)
-	procDeleteObject.Call(tb)
-
-	pen, _, _ := procCreatePen.Call(0, 1, uintptr(CLR_BORDER))
-	oldP, _, _ := procSelectObject.Call(hdc, pen)
-	procMoveToEx.Call(hdc, 0, TITLE_H, 0)
-	procLineTo.Call(hdc, WIN_W, TITLE_H)
-	procSelectObject.Call(hdc, oldP)
-	procDeleteObject.Call(pen)
-
-	bar, _, _ := procCreateSolid.Call(uintptr(CLR_ACCENT))
-	var br struct{ L, T, R, B int32 }
-	br.L, br.T, br.R, br.B = 0, 0, 4, TITLE_H
-	procFillRect.Call(hdc, uintptr(unsafe.Pointer(&br)), bar)
-	procDeleteObject.Call(bar)
-
-	procSetBkMode.Call(hdc, 1)
-	procSetTextColor.Call(hdc, uintptr(CLR_TXT_MAIN))
-	procSelectObject.Call(hdc, hFontAppTitle)
-	ttRc := tr
-	ttRc.L, ttRc.T, ttRc.R, ttRc.B = 18, 0, WIN_W-120, TITLE_H
-	tt, _ := windows.UTF16PtrFromString("客户端")
-	procDrawText.Call(hdc, uintptr(unsafe.Pointer(tt)), 3, uintptr(unsafe.Pointer(&ttRc)), 0x24)
-
-	procSelectObject.Call(hdc, hFontStat)
-	procSetTextColor.Call(hdc, uintptr(CLR_TXT_MUTED))
-
-	mr := tr
-	mr.L, mr.T, mr.R, mr.B = WIN_W-80, 0, WIN_W-40, TITLE_H
-	mx, _ := windows.UTF16PtrFromString("一")
-	procDrawText.Call(hdc, uintptr(unsafe.Pointer(mx)), 1, uintptr(unsafe.Pointer(&mr)), 0x25)
-
-	cr := tr
-	cr.L, cr.T, cr.R, cr.B = WIN_W-40, 0, WIN_W, TITLE_H
-	cx, _ := windows.UTF16PtrFromString("✕")
-	procDrawText.Call(hdc, uintptr(unsafe.Pointer(cx)), 1, uintptr(unsafe.Pointer(&cr)), 0x25)
+// invalidateSelf 作废整个按钮客户区。
+// InvalidateRect 第 1 参是窗口、第 2 参才是 RECT 指针。直接把 HWND 当指针传，
+// 系统去读非法地址，调用必然失败，按钮就永远不重绘（悬浮态不变色的根因）。
+func invalidateSelf(h windows.HWND) {
+	var rc RECT
+	pGetClientRect.Call(uintptr(h), uintptr(unsafe.Pointer(&rc)))
+	pInvalidate.Call(uintptr(h), uintptr(unsafe.Pointer(&rc)), 1)
 }
+
+// ---------- 自绘 ----------
+
+func paint(hdc uintptr) {
+	var ps PAINTSTRUCT
+	hdc, _, _ = pBeginPaint.Call(uintptr(hwndMain), uintptr(unsafe.Pointer(&ps)))
+	WW, WH := S(LWW), S(LWH)
+	TL, BA := S(LTITLE), S(LBAR)
+	X0, LXW := S(LX0), S(LXW)
+
+	// 基底：Mica 开启时这是兜底色（透出桌面），关闭时就是窗口纯色底
+	var bg RECT
+	bg.L, bg.T, bg.R, bg.B = 0, 0, WW, WH
+	fillRect(hdc, &bg, CLR_BASE)
+
+	// 标题栏：与 Mica 融为一体，不画任何分割线
+	tr := RECT{0, 0, WW, TL}
+	fillRect(hdc, &tr, CLR_BASE)
+
+	// 左侧微徽标：外圈光晕 + 内核实心，单圆点太平
+	iconClr := uint32(CLR_ACCENT)
+	haloClr := uint32(0xE8F1FB)
+	brush, _, _ := pSelectObject.Call(hdc, uintptr(mkb(haloClr)))
+	penHalo, _, _ := pSelectObject.Call(hdc, uintptr(mkPen(haloClr)))
+	hx, hy, hsz := S(14), TL/2-S(10), S(20)
+	pRoundRect.Call(hdc, uintptr(hx), uintptr(hy), uintptr(hx+hsz), uintptr(hy+hsz), uintptr(hsz), uintptr(hsz))
+	pSelectObject.Call(hdc, brush, 0)
+	pSelectObject.Call(hdc, penHalo)
+	brush, _, _ = pSelectObject.Call(hdc, uintptr(mkb(iconClr)))
+	penIn, _, _ := pSelectObject.Call(hdc, uintptr(mkPen(iconClr)))
+	ix, iy, isz := S(18), TL/2-S(6), S(12)
+	pRoundRect.Call(hdc, uintptr(ix), uintptr(iy), uintptr(ix+isz), uintptr(iy+isz), uintptr(isz), uintptr(isz))
+	pSelectObject.Call(hdc, brush, 0)
+	pSelectObject.Call(hdc, penIn)
+
+	pSetBkMode.Call(hdc, 1)
+	pSetTextColor.Call(hdc, uintptr(CLR_TXT))
+	pSelectObject.Call(hdc, fAppTitle)
+	// 标题栏文字按实测字高垂直居中，与登录按钮同一套算法。
+	var tsize struct{ Cx, Cy int32 }
+	titleStr := "X-Panel"
+	tt := mustU16(titleStr)
+	tw := u16Len(titleStr)
+	pGetTextExtent.Call(hdc, uintptr(unsafe.Pointer(tt)), uintptr(tw), uintptr(unsafe.Pointer(&tsize)))
+	ttr := RECT{S(38), (TL-tsize.Cy)/2 + S(1), WW - S(96), 0}
+	ttr.B = ttr.T + tsize.Cy
+	pDrawText.Call(hdc, uintptr(unsafe.Pointer(tt)), uintptr(tw), uintptr(unsafe.Pointer(&ttr)), DT_SINGLELINE)
+	// 副标题：紧跟主标题右侧，冷灰小字
+	pSetTextColor.Call(hdc, uintptr(CLR_FAINT))
+	pSelectObject.Call(hdc, fSub)
+	subStr := "客户端"
+	st := mustU16(subStr)
+	sw := u16Len(subStr)
+	var ssize struct{ Cx, Cy int32 }
+	pGetTextExtent.Call(hdc, uintptr(unsafe.Pointer(st)), uintptr(sw), uintptr(unsafe.Pointer(&ssize)))
+	sr := RECT{S(38) + S(64), (TL-ssize.Cy)/2 + S(1), WW - S(96), 0}
+	sr.B = sr.T + ssize.Cy
+	pDrawText.Call(hdc, uintptr(unsafe.Pointer(st)), uintptr(sw), uintptr(unsafe.Pointer(&sr)), DT_SINGLELINE)
+
+	// 最小化按钮区：Fluent 是悬浮微灰、无图标描边变化
+	mr := RECT{WW - S(88), 0, WW - S(44), TL}
+	if pressTitle == 1 {
+		fillRect(hdc, &mr, 0xE5E7EC) // 按下深一档
+	} else if hoverMin {
+		fillRect(hdc, &mr, 0xEDEFF3) // 悬浮微灰
+	}
+	minPenClr := uint32(0x4A4A4A)
+	tmpen, _, _ := pCreatePen.Call(0, 1, uintptr(minPenClr))
+	mop, _, _ := pSelectObject.Call(hdc, tmpen)
+	mx1, mx2, my := WW-S(71), WW-S(61), TL/2+S(3)
+	pMoveToEx.Call(hdc, uintptr(mx1), uintptr(my), 0)
+	pLineTo.Call(hdc, uintptr(mx2), uintptr(my))
+	pSelectObject.Call(hdc, mop)
+	pDeleteObject.Call(tmpen)
+
+	// 关闭按钮区：悬浮才变红，Fluent 标准行为
+	cr := RECT{WW - S(44), 0, WW, TL}
+	xPenClr := uint32(0x4A4A4A)
+	if pressTitle == 2 {
+		fillRect(hdc, &cr, CLR_DANGER_H) // 按下更深红
+		xPenClr = 0xFFFFFF
+	} else if hoverClose {
+		fillRect(hdc, &cr, CLR_DANGER) // 经典关闭红底
+		xPenClr = 0xFFFFFF             // 纯白交叉叉号
+	}
+	xpen, _, _ := pCreatePen.Call(0, 1, uintptr(xPenClr))
+	xop, _, _ := pSelectObject.Call(hdc, xpen)
+	cx1, cx2 := WW-S(27), WW-S(17)
+	cy1, cy2 := TL/2-S(5), TL/2+S(5)
+	pMoveToEx.Call(hdc, uintptr(cx1), uintptr(cy1), 0)
+	pLineTo.Call(hdc, uintptr(cx2), uintptr(cy2))
+	pMoveToEx.Call(hdc, uintptr(cx2), uintptr(cy1), 0)
+	pLineTo.Call(hdc, uintptr(cx1), uintptr(cy2))
+	pSelectObject.Call(hdc, xop)
+	pDeleteObject.Call(xpen)
+
+	// page1：输入框直接坐 Mica 上，不套卡片。
+	// 底部三段渐淡软阴影，让输入框有「浮起」的层级感，替代被删掉的卡片。
+	if page == 1 {
+		softShadow(hdc, S(LM), S(EDIT_Y)+S(EDIT_H), S(LCW))
+		// 输入框自绘描边（替代系统 WS_BORDER 凹陷框），聚焦时变 accent
+		edgClr := uint32(CLR_INPUT_B)
+		if editFocused {
+			edgClr = CLR_ACCENT
+		}
+		ib, _, _ := pCreateSolid.Call(uintptr(CLR_INPUT))
+		ip, _, _ := pCreatePen.Call(0, 1, uintptr(edgClr))
+		oib, _, _ := pSelectObject.Call(hdc, ib)
+		oip, _, _ := pSelectObject.Call(hdc, ip)
+		rd := S(10)
+		pRoundRect.Call(hdc, uintptr(S(LM)), uintptr(S(EDIT_Y)), uintptr(S(LM+LCW)), uintptr(S(EDIT_Y+EDIT_H)), uintptr(rd), uintptr(rd))
+		pSelectObject.Call(hdc, oib)
+		pSelectObject.Call(hdc, oip)
+		pDeleteObject.Call(ib)
+		pDeleteObject.Call(ip)
+	}
+
+	// page2：仪表盘卡片
+	if page == 2 {
+		cx, cy, cw, ch := S(LM), S(CARD2_Y), S(LCW), S(CARD2_H)
+		// 卡片下方三段渐淡软阴影，只往下不出左右头
+		softShadow(hdc, cx, cy+ch, cw)
+		cb, _, _ := pCreateSolid.Call(uintptr(CLR_CARD))
+		cp, _, _ := pCreatePen.Call(0, 1, uintptr(CLR_CARD_B))
+		ob, _, _ := pSelectObject.Call(hdc, cb)
+		opp, _, _ := pSelectObject.Call(hdc, cp)
+		rr := S(12)
+		pRoundRect.Call(hdc, uintptr(cx), uintptr(cy), uintptr(cx+cw), uintptr(cy+ch), uintptr(rr), uintptr(rr))
+		pSelectObject.Call(hdc, ob, 0)
+		pSelectObject.Call(hdc, opp)
+		pDeleteObject.Call(cb)
+		pDeleteObject.Call(cp)
+
+		// 卡内分割线
+		pen3, _, _ := pCreatePen.Call(0, 1, uintptr(0xE3E6EC))
+		op3, _, _ := pSelectObject.Call(hdc, pen3)
+		dy := uintptr(S(DIV_Y))
+		pMoveToEx.Call(hdc, uintptr(X0), dy, 0)
+		pLineTo.Call(hdc, uintptr(X0+LXW), dy)
+		pSelectObject.Call(hdc, op3)
+		pDeleteObject.Call(pen3)
+
+		// 状态指示点：自绘实心圆 + 外圈光晕，替代 ● 字符
+		dotClr := uint32(CLR_IDLE)
+		if connected {
+			dotClr = CLR_SUCCESS
+		}
+		dcx, dcy := S(LX0)+S(5), S(STATUS_Y)+S(11)
+		dot(hdc, dcx, dcy, S(7), uint32(0xE3EAF3)) // 外圈光晕
+		dot(hdc, dcx, dcy, S(4), dotClr)           // 内核实心
+	}
+
+	// 底栏：延续 Mica，不画实色底，两段渐淡过渡代替 1px 硬线
+	softShadow(hdc, 0, WH-BA, WW)
+	pEndPaint.Call(uintptr(hwndMain), uintptr(unsafe.Pointer(&ps)))
+}
+
+// ---------- 窗口过程 ----------
 
 func wndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
-	case WM_NCHITTEST:
-		var pt struct{ X, Y int32 }
-		pt.X = int32(int16(lParam & 0xFFFF))
-		pt.Y = int32(int16(lParam >> 16))
-		procScreenToClient.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&pt)))
-		if pt.Y < TITLE_H {
-			if pt.X > WIN_W-80 {
-				return 1
+	case 0x0020: // WM_SETCURSOR
+		// wParam 是光标所在窗口。
+		// page1（导入节点页）整个窗口拦截光标形状，输入框也强制箭头；
+		// page2（仪表盘）没有输入框，只在主窗口和按钮上接管，其余交给系统。
+		if page == 1 {
+			applyCursor()
+			return 1
+		}
+		switch windows.HWND(wParam) {
+		case hwndMain, hBtnLogin, hBtnConn, hBtnSwitch:
+			applyCursor()
+			return 1
+		}
+		break
+	case 0x0200: // WM_MOUSEMOVE
+		x := int32(int16(lParam & 0xFFFF))
+		y := int32(int16(lParam >> 16))
+		WW := S(LWW)
+		newMin, newClose := titleBtnAt(x, y)
+		if newMin != hoverMin || newClose != hoverClose {
+			hoverMin, hoverClose = newMin, newClose
+			tr := RECT{WW - S(88), 0, WW, S(LTITLE)}
+			pInvalidate.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&tr)), 1)
+			if newMin || newClose {
+				logTitleMouse("进入", x, y)
+			} else if pressTitle != 0 {
+				logTitleMouse("拖出取消", x, y)
 			}
+		}
+		tme := struct {
+			cbSize, dwFlags uint32
+			hwndTrack       windows.HWND
+			dwHoverTime     uint32
+		}{16, 0x2, hwnd, 0} // TME_LEAVE
+		pTrackMouse.Call(uintptr(unsafe.Pointer(&tme)))
+		setHoverBtn(btnAt(x, y))
+		applyCursor()
+		return 0
+	case 0x02A3: // WM_MOUSELEAVE
+		if hoverMin || hoverClose {
+			logTitleMouse("离开", S(LWW)-S(66), S(LTITLE)/2)
+			hoverMin, hoverClose = false, false
+			WW := S(LWW)
+			tr := RECT{WW - S(88), 0, WW, S(LTITLE)}
+			pInvalidate.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&tr)), 1)
+		}
+		setHoverBtn(0)
+		applyCursor()
+		return 0
+	case WM_NCHITTEST:
+		pt := struct{ X, Y int32 }{int32(int16(lParam & 0xFFFF)), int32(int16(lParam >> 16))}
+		pScreenToClient.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&pt)))
+		if pt.Y < S(LTITLE) && pt.X > S(LWW)-S(88) {
+			return 1 // 标题栏按钮区返回 HTCLIENT，接收鼠标移动和点击
+		}
+		if pt.Y < S(LTITLE) {
 			return HTCAPTION
 		}
 		return 1
-
 	case WM_LBUTTONDOWN:
 		x := int32(int16(lParam & 0xFFFF))
 		y := int32(int16(lParam >> 16))
-		if y < TITLE_H {
-			if x > WIN_W-40 {
-				log.Println("[UI] 用户点击关闭按钮，退出程序")
-				procDestroyWindow.Call(uintptr(hwnd))
+		if y < S(LTITLE) {
+			WW := S(LWW)
+			if x > WW-S(44) {
+				logTitleMouse("按下", x, y)
+				pressTitle = 2
+				pSetCapture.Call(uintptr(hwnd))
+				pInvalidate.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&RECT{WW - S(44), 0, WW, S(LTITLE)})), 1)
 				return 0
 			}
-			if x > WIN_W-80 {
-				log.Println("[UI] 用户点击最小化按钮")
-				procSendMessage.Call(uintptr(hwnd), WM_SYSCOMMAND, 0xF020, 0)
+			if x > WW-S(88) {
+				logTitleMouse("按下", x, y)
+				pressTitle = 1
+				pSetCapture.Call(uintptr(hwnd))
+				pInvalidate.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&RECT{WW - S(88), 0, WW, S(LTITLE)})), 1)
 				return 0
 			}
 		}
-		r, _, _ := procDefWindow.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+		r, _, _ := pDefWindowProc.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
 		return r
-
-	case WM_PAINT:
-		var ps PAINTSTRUCT
-		hdc, _, _ := procBeginPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
-		paintTitleBar(hdc)
-		paintStatusBarBg(hdc)
-
-		if currentPage == 1 {
-			// Page 1 卡片 (x=24, y=108, w=402, h=200)
-			paintCard(hdc, 24, 108, WIN_W-48, 200, 12)
-		} else {
-			// Page 2 卡片 (x=24, y=58, w=402, h=210)
-			paintCard(hdc, 24, 58, WIN_W-48, 210, 12)
-
-			// 分割线 (y=172)
-			pen, _, _ := procCreatePen.Call(0, 1, uintptr(CLR_BORDER))
-			oldP, _, _ := procSelectObject.Call(hdc, pen)
-			procMoveToEx.Call(hdc, 40, 172, 0)
-			procLineTo.Call(hdc, WIN_W-40, 172)
-			procSelectObject.Call(hdc, oldP)
-			procDeleteObject.Call(pen)
+	case WM_LBUTTONUP:
+		if pressTitle != 0 {
+			x := int32(int16(lParam & 0xFFFF))
+			y := int32(int16(lParam >> 16))
+			WW := S(LWW)
+			pReleaseCapture.Call()
+			pressed := pressTitle
+			pressTitle = 0
+			tr := RECT{WW - S(88), 0, WW, S(LTITLE)}
+			pInvalidate.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&tr)), 1)
+			min, close := titleBtnAt(x, y)
+			if close && pressed == 2 {
+				logTitleMouse("点击", x, y)
+				pDestroyWindow.Call(uintptr(hwnd))
+				return 0
+			}
+			if min && pressed == 1 {
+				logTitleMouse("点击", x, y)
+				pSendMessage.Call(uintptr(hwnd), WM_SYSCOMMAND, SC_MINIMIZE, 0)
+				return 0
+			}
+			logTitleMouse("松开(取消)", x, y)
 		}
-		procEndPaint.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&ps)))
+		r, _, _ := pDefWindowProc.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+		return r
+	case WM_PAINT:
+		paint(0)
 		return 0
-
 	case WM_DRAWITEM:
 		dis := (*DRAWITEMSTRUCT)(unsafe.Pointer(lParam))
 		if dis.CtlType == 4 {
@@ -435,209 +986,191 @@ func wndProc(hwnd windows.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 			return 1
 		}
 		return 0
-
 	case WM_COMMAND:
+		if lParam != 0 {
+			log.Printf("[CMD] 命令触发 按钮=%s HWND=0x%x 通知码=%d", btnName(windows.HWND(lParam)), lParam, wParam>>16)
+		}
 		switch lParam {
-		case uintptr(hwndBtnLogin):
+		case uintptr(hBtnLogin):
 			handleLogin()
-		case uintptr(hwndBtnSwitch):
+		case uintptr(hBtnSwitch):
 			if connected {
 				stopProxy()
 			}
 			switchPage(1)
-		case uintptr(hwndBtnConnect):
+		case uintptr(hBtnConn):
 			go toggleConnect()
 		}
 		return 0
-
 	case WM_CTLCOLORSTATIC:
 		hdc := wParam
-		procSetBkMode.Call(hdc, 1)
-		target := windows.HWND(lParam)
-		switch target {
-		case hwndSpeedBar:
-			procSetTextColor.Call(hdc, CLR_SUCCESS)
-			return uintptr(hBrushBar)
-		case hwndStatus:
-			if connected {
-				procSetTextColor.Call(hdc, CLR_SUCCESS)
-			} else {
-				procSetTextColor.Call(hdc, CLR_DANGER)
+		pSetBkMode.Call(hdc, 1)
+		t := windows.HWND(lParam)
+		for _, pair := range []struct {
+			h     windows.HWND
+			clr   uint32
+			brush windows.Handle
+		}{
+			{hSpeed, CLR_MUTED, brBase},
+			{hStatus, pick(connected, CLR_SUCCESS, CLR_IDLE), brBase},
+			{hExpire, CLR_ACCENT, brBase},
+			{hTraffic, CLR_TXT, brBase},
+			{hUp, CLR_TXT, brBase},
+			{hDown, CLR_TXT, brBase},
+			{hLblTotal, CLR_MUTED, brBase},
+			{hLblUp, CLR_MUTED, brBase},
+			{hLblDown, CLR_MUTED, brBase},
+			{hTip, CLR_DANGER, brBase},
+			{hTitle1, CLR_TXT, brBase},
+			{hSub1, CLR_FAINT, brBase},
+			{hFooter, CLR_FAINT, brBase},
+		} {
+			if t == pair.h {
+				pSetTextColor.Call(hdc, uintptr(pair.clr))
+				return uintptr(pair.brush)
 			}
-			return uintptr(hBrushCard)
-		case hwndExpire:
-			procSetTextColor.Call(hdc, CLR_ACCENT)
-			return uintptr(hBrushCard)
-		case hwndTraffic, hwndUp, hwndDown:
-			procSetTextColor.Call(hdc, CLR_TXT_MAIN)
-			return uintptr(hBrushCard)
-		case hwndLoginTip:
-			procSetTextColor.Call(hdc, CLR_DANGER)
-			return uintptr(hBrushBg)
-		case hwndLblTotal, hwndLblUp, hwndLblDown:
-			procSetTextColor.Call(hdc, CLR_TXT_MUTED)
-			return uintptr(hBrushCard)
-		case hwndPage1Title:
-			procSetTextColor.Call(hdc, CLR_TXT_MAIN)
-			return uintptr(hBrushBg)
-		case hwndPage1Sub, hwndFooterDesc:
-			procSetTextColor.Call(hdc, CLR_TXT_FAINT)
-			return uintptr(hBrushBg)
-		default:
-			procSetTextColor.Call(hdc, CLR_TXT_MAIN)
-			return uintptr(hBrushBg)
 		}
-
+		pSetTextColor.Call(hdc, uintptr(CLR_TXT))
+		return uintptr(brBase)
 	case WM_CTLCOLOREDIT:
 		hdc := wParam
-		procSetBkMode.Call(hdc, 2)
-		procSetBkColor.Call(hdc, CLR_INPUT_BG)
-		procSetTextColor.Call(hdc, CLR_TXT_MAIN)
-		return uintptr(hBrushEdit)
-
+		pSetBkMode.Call(hdc, 2)
+		pSetBkColor.Call(hdc, uintptr(CLR_INPUT))
+		pSetTextColor.Call(hdc, uintptr(CLR_TXT))
+		return uintptr(brInput)
 	case WM_DESTROY:
-		log.Println("[CORE] 窗口销毁，准备退出...")
 		if connected {
 			stopProxy()
 		}
-		procPostQuit.Call(0)
+		pPostQuit.Call(0)
 		return 0
-
-	default:
-		r, _, _ := procDefWindow.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
-		return r
 	}
+	r, _, _ := pDefWindowProc.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+	return r
 }
 
-// ---------- 业务逻辑 ----------
+func pick(cond bool, a, b uint32) uint32 {
+	if cond {
+		return a
+	}
+	return b
+}
+
+func switchPage(p int) {
+	page = p
+	show := func(list []*windows.HWND, s uintptr) {
+		for _, h := range list {
+			pShowWindow.Call(uintptr(*h), s)
+		}
+	}
+	s1, s2 := uintptr(SW_HIDE), uintptr(SW_HIDE)
+	if p == 1 {
+		s1 = SW_SHOW
+	} else {
+		s2 = SW_SHOW
+	}
+	show(page1, s1)
+	show(page2, s2)
+
+	// 切页面时当前悬停按钮可能被隐藏，残留 hoverBtn 会让光标卡在手型
+	hoverBtn = 0
+	pressBtn = 0
+	pressTitle = 0
+	hoverPointed = false
+	pInvalidate.Call(uintptr(hwndMain), 0, 1)
+}
+
+// ---------- 业务（沿用 v6，本次重构未动） ----------
 
 func parseVless(raw string) (uuid, address, port, sni, pbk, sid, flow string, err error) {
 	raw = strings.TrimSpace(raw)
-	log.Printf("[CONFIG] 解析 VLESS 链接: 长度=%d", len(raw))
 	if !strings.HasPrefix(raw, "vless://") {
-		log.Printf("[CONFIG] [ERROR] 链接缺少 vless:// 前缀")
 		return "", "", "", "", "", "", "", fmt.Errorf("not vless")
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		log.Printf("[CONFIG] [ERROR] URL 解析失败: %v", err)
-		return "", "", "", "", "", "", "", err
+		return
 	}
 	if u.User == nil || u.User.Username() == "" || u.Hostname() == "" || u.Port() == "" {
-		log.Printf("[CONFIG] [ERROR] 缺少核心参数 (uuid/host/port)")
 		return "", "", "", "", "", "", "", fmt.Errorf("missing uuid, host or port")
 	}
-	if _, err := strconv.Atoi(u.Port()); err != nil {
-		log.Printf("[CONFIG] [ERROR] 端口非数字: %s", u.Port())
+	if _, err = strconv.Atoi(u.Port()); err != nil {
 		return "", "", "", "", "", "", "", fmt.Errorf("invalid port")
 	}
 	q := u.Query()
-	log.Printf("[CONFIG] 节点解析成功: UUID=%s, Server=%s:%s, SNI=%s", u.User.Username(), u.Hostname(), u.Port(), q.Get("sni"))
 	return u.User.Username(), u.Hostname(), u.Port(), q.Get("sni"), q.Get("pbk"), q.Get("sid"), q.Get("flow"), nil
 }
 
 func buildXrayConfig(uuid, address, portStr, sni, pbk, sid, flow string) string {
-	log.Printf("[CONFIG] 构建 Xray 配置 JSON: Host=%s:%s, SNI=%s, PBK=%s", address, portStr, sni, pbk)
 	port, _ := strconv.Atoi(portStr)
-	fp := "chrome"
-	realityObj := map[string]interface{}{
-		"show":        false,
-		"fingerprint": fp,
-		"serverName":  sni,
-		"publicKey":   pbk,
-		"shortId":     sid,
-		"spiderX":     "",
-	}
-	streamSettings := map[string]interface{}{
-		"network":  "tcp",
-		"security": "reality",
-		"realitySettings": realityObj,
-	}
-	userObj := map[string]interface{}{
-		"id":         uuid,
-		"encryption": "none",
-	}
+	user := map[string]interface{}{"id": uuid, "encryption": "none"}
 	if flow != "" {
-		userObj["flow"] = flow
+		user["flow"] = flow
 	}
-	vlessOut := map[string]interface{}{
-		"protocol": "vless",
-		"settings": map[string]interface{}{
-			"vnext": []map[string]interface{}{
-				{
-					"address": address,
-					"port":    port,
-					"users":   []map[string]interface{}{userObj},
-				},
-			},
-		},
-		"streamSettings": streamSettings,
-		"tag":            "proxy",
-	}
-	config := map[string]interface{}{
+	conf := map[string]interface{}{
 		"log": map[string]interface{}{"loglevel": "warning"},
 		"inbounds": []map[string]interface{}{
-			{
-				"tag":      "socks-in",
-				"port":     10808,
-				"listen":   "127.0.0.1",
-				"protocol": "socks",
-				"settings": map[string]interface{}{"auth": "noauth", "udp": true},
-			},
-			{
-				"tag":      "http-in",
-				"port":     10809,
-				"listen":   "127.0.0.1",
-				"protocol": "http",
-				"settings": map[string]interface{}{"allowTransparent": false},
-			},
+			{"tag": "socks-in", "port": 10808, "listen": "127.0.0.1", "protocol": "socks", "settings": map[string]interface{}{"auth": "noauth", "udp": true}},
+			{"tag": "http-in", "port": 10809, "listen": "127.0.0.1", "protocol": "http", "settings": map[string]interface{}{"allowTransparent": false}},
 		},
 		"outbounds": []interface{}{
-			vlessOut,
+			map[string]interface{}{
+				"protocol": "vless",
+				"settings": map[string]interface{}{"vnext": []map[string]interface{}{{"address": address, "port": port, "users": []map[string]interface{}{user}}}},
+				"streamSettings": map[string]interface{}{
+					"network":         "tcp",
+					"security":        "reality",
+					"realitySettings": map[string]interface{}{"show": false, "fingerprint": "chrome", "serverName": sni, "publicKey": pbk, "shortId": sid, "spiderX": ""},
+				},
+				"tag": "proxy",
+			},
 			map[string]interface{}{"protocol": "freedom", "tag": "direct"},
 		},
 	}
-	b, _ := json.Marshal(config)
+	b, _ := json.Marshal(conf)
 	return string(b)
 }
 
-func setText(h windows.HWND, text string) {
-	ptr, _ := windows.UTF16PtrFromString(text)
-	procSetWindowText.Call(uintptr(h), uintptr(unsafe.Pointer(ptr)))
-}
-
-func getText(h windows.HWND) string {
-	var buf [4096]uint16
-	procGetWindowText.Call(uintptr(h), uintptr(unsafe.Pointer(&buf[0])), 4096)
-	return windows.UTF16ToString(buf[:])
+func setSystemProxy(enable bool, addr string) {
+	k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Internet Settings`, registry.SET_VALUE)
+	if err != nil {
+		log.Printf("[PROXY] 打开注册表失败: %v", err)
+		return
+	}
+	defer k.Close()
+	if enable {
+		k.SetDWordValue("ProxyEnable", 1)
+		k.SetStringValue("ProxyServer", addr)
+		k.SetStringValue("ProxyOverride", "localhost;127.*;10.*;192.168.*;<local>")
+	} else {
+		k.SetDWordValue("ProxyEnable", 0)
+	}
+	pInternetSet.Call(0, 39, 0, 0)
+	pInternetSet.Call(0, 37, 0, 0)
 }
 
 func handleLogin() {
-	log.Println("[LOGIN] 开始处理登录...")
-	raw := getText(hwndEdit)
+	raw := getText(hEdit)
+	log.Printf("[LOGIN] 开始解析 长度=%d", len(raw))
 	uuid, _, _, _, _, _, _, err := parseVless(raw)
 	if err != nil {
-		log.Printf("[LOGIN] [WARN] 节点链接错误: %v", err)
-		setText(hwndLoginTip, "链接格式错误，请粘贴以 vless:// 开头的完整节点链接")
+		log.Printf("[LOGIN] 解析失败: %v", err)
+		setText(hTip, "链接格式错误，请粘贴以 vless:// 开头的完整节点链接")
 		return
 	}
+	log.Printf("[LOGIN] 解析成功，切页")
 	serverUUID = uuid
-	log.Printf("[LOGIN] 记录绑定 UUID: %s", serverUUID)
 	if k, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\XPanel`, registry.ALL_ACCESS); err == nil {
 		k.SetStringValue("link", raw)
 		k.Close()
-		log.Println("[LOGIN] 链接已持久化至注册表")
-	} else {
-		log.Printf("[LOGIN] [WARN] 注册表写入失败: %v", err)
 	}
-	setText(hwndLoginTip, "")
+	setText(hTip, "")
 	switchPage(2)
 }
 
 func toggleConnect() {
 	stateMu.Lock()
 	if busy {
-		log.Println("[CONN] 连接操作中，忽略重复触发")
 		stateMu.Unlock()
 		return
 	}
@@ -654,56 +1187,46 @@ func toggleConnect() {
 }
 
 func startProxy() {
-	log.Println("[CORE] 准备启动 Xray 核心代理...")
-	raw := getText(hwndEdit)
-	uuid, address, port, sni, pbk, sid, flow, err := parseVless(raw)
+	uuid, address, port, sni, pbk, sid, flow, err := parseVless(getText(hEdit))
 	if err != nil {
-		log.Printf("[CORE] [ERROR] 节点解析失败: %v", err)
-		setText(hwndStatus, "● 链接格式错误")
+		setText(hStatus, "链接格式错误")
 		return
 	}
 	serverUUID = uuid
-	setText(hwndStatus, "● 正在连接...")
-	confJSON := buildXrayConfig(uuid, address, port, sni, pbk, sid, flow)
-	conf, err := core.LoadConfig("json", bytes.NewReader([]byte(confJSON)))
+	setText(hStatus, "正在连接...")
+	conf, err := core.LoadConfig("json", bytes.NewReader([]byte(buildXrayConfig(uuid, address, port, sni, pbk, sid, flow))))
 	if err != nil {
-		log.Printf("[CORE] [ERROR] Xray 加载配置对象失败: %v", err)
-		setText(hwndStatus, "● 配置构建错误")
+		setText(hStatus, "配置构建错误")
 		return
 	}
-	server, err := core.New(conf)
+	srv, err := core.New(conf)
 	if err != nil {
-		log.Printf("[CORE] [ERROR] Xray 实例初始化失败: %v", err)
-		setText(hwndStatus, "● 内核启动失败")
+		setText(hStatus, "内核启动失败")
 		return
 	}
-	if err := server.Start(); err != nil {
-		log.Printf("[CORE] [ERROR] Xray 服务启动失败 (检查端口 10808/10809): %v", err)
-		setText(hwndStatus, "● 端口被占用")
+	if err := srv.Start(); err != nil {
+		setText(hStatus, "端口被占用")
 		return
 	}
-	xray_server = server
-	log.Println("[CORE] Xray 核心运行成功，正在设置系统代理 127.0.0.1:10809")
+	xray = srv
 	setSystemProxy(true, "127.0.0.1:10809")
 	connected = true
-	setText(hwndBtnConnect, "断开连接")
-	setText(hwndStatus, "● 已连接加速")
-	log.Println("[CORE] 代理状态: 已连接加速")
+	setText(hBtnConn, "断开连接")
+	setText(hStatus, "已连接加速")
+	pInvalidate.Call(uintptr(hwndMain), 0, 1) // 状态点变色
 }
 
 func stopProxy() {
-	log.Println("[CORE] 正在停止 Xray 代理...")
-	if xray_server != nil {
-		xray_server.Close()
-		xray_server = nil
-		log.Println("[CORE] Xray 实例已释放")
+	if xray != nil {
+		xray.Close()
+		xray = nil
 	}
 	setSystemProxy(false, "")
 	connected = false
 	speedUp, speedDown, lastUp, lastDown = 0, 0, 0, 0
-	setText(hwndBtnConnect, "启动连接")
-	setText(hwndStatus, "● 未连接")
-	log.Println("[CORE] 代理状态: 已完全断开")
+	setText(hBtnConn, "启动加速")
+	setText(hStatus, "未连接")
+	pInvalidate.Call(uintptr(hwndMain), 0, 1) // 状态点变色
 }
 
 func fmtBytes(n int64) string {
@@ -714,44 +1237,34 @@ func fmtBytes(n int64) string {
 		return fmt.Sprintf("%.2f MB", float64(n)/(1<<20))
 	case n >= 1<<10:
 		return fmt.Sprintf("%.2f KB", float64(n)/(1<<10))
-	default:
-		return fmt.Sprintf("%d B", n)
 	}
+	return fmt.Sprintf("%d B", n)
 }
 
 func pollTraffic() {
-	log.Println("[MONITOR] 流量与速率轮询协程启动...")
-	first := true
 	for {
 		time.Sleep(2 * time.Second)
 		if serverUUID == "" {
 			continue
 		}
-		url := PANEL_BASE + "/panel/pub/traffic/" + serverUUID
-		resp, err := http.Get(url)
+		resp, err := http.Get(PANEL_BASE + "/panel/pub/traffic/" + serverUUID)
 		if err != nil {
-			log.Printf("[MONITOR] [WARN] 获取流量失败 %s: %v", url, err)
 			continue
 		}
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-
 		var res struct {
 			Success bool `json:"success"`
 			Obj     struct {
-				Up         int64       `json:"up"`
-				Down       int64       `json:"down"`
-				Total      int64       `json:"total"`
-				ExpiryTime interface{} `json:"expiryTime"`
+				Up, Down, Total int64
+				ExpiryTime      interface{}
 			} `json:"obj"`
 		}
 		if json.Unmarshal(body, &res) != nil || !res.Success {
-			log.Printf("[MONITOR] [WARN] 数据解析失败: %s", string(body))
 			continue
 		}
-		if !first {
-			speedUp = (res.Obj.Up - lastUp) / 2
-			speedDown = (res.Obj.Down - lastDown) / 2
+		if lastUp > 0 || lastDown > 0 {
+			speedUp, speedDown = (res.Obj.Up-lastUp)/2, (res.Obj.Down-lastDown)/2
 			if speedUp < 0 {
 				speedUp = 0
 			}
@@ -760,18 +1273,14 @@ func pollTraffic() {
 			}
 		}
 		lastUp, lastDown = res.Obj.Up, res.Obj.Down
-		first = false
-
-		used := res.Obj.Up + res.Obj.Down
 		tot := ""
 		if res.Obj.Total > 0 {
 			tot = " / " + fmtBytes(res.Obj.Total)
 		}
-		setText(hwndTraffic, fmtBytes(used)+tot)
-		setText(hwndUp, fmtBytes(res.Obj.Up))
-		setText(hwndDown, fmtBytes(res.Obj.Down))
-
-		expLine := "到期时间: 长期有效"
+		setText(hTraffic, fmtBytes(res.Obj.Up+res.Obj.Down)+tot)
+		setText(hUp, fmtBytes(res.Obj.Up))
+		setText(hDown, fmtBytes(res.Obj.Down))
+		expLine := "到期: 长期有效"
 		var exp int64
 		switch v := res.Obj.ExpiryTime.(type) {
 		case float64:
@@ -779,194 +1288,179 @@ func pollTraffic() {
 		case string:
 			exp, _ = strconv.ParseInt(v, 10, 64)
 		}
-		if exp > 0 {
-			if exp > 1e11 {
-				exp = exp / 1000 // 毫秒转秒
-			}
-			t := time.Unix(exp, 0)
-			days := int64(time.Until(t).Hours() / 24)
-			expLine = fmt.Sprintf("到期: %s (%d天)", t.Format("2006/01/02"), days)
+		if exp > 1e11 {
+			exp /= 1000
 		}
-		setText(hwndExpire, expLine)
-
-		statusText := fmt.Sprintf("↑ %s/s  ↓ %s/s · 客户端 v5.3.1", fmtBytes(speedUp), fmtBytes(speedDown))
-		setText(hwndSpeedBar, statusText)
+		if exp > 0 {
+			t := time.Unix(exp, 0)
+			expLine = fmt.Sprintf("到期: %s (%d天)", t.Format("2006/01/02"), int64(time.Until(t).Hours()/24))
+		}
+		setText(hExpire, expLine)
+		setText(hSpeed, fmt.Sprintf("↑ %s/s  ↓ %s/s · 客户端 %s", fmtBytes(speedUp), fmtBytes(speedDown), VER))
 	}
 }
 
-func createFont(size int, bold bool, name string) uintptr {
-	w := 400
-	if bold {
-		w = 700
-	}
-	n, _ := windows.UTF16PtrFromString(name)
-	h, _, _ := procCreateFont.Call(uintptr(size), 0, 0, 0, uintptr(w), 0, 0, 0, 1, 0, 0, 0, 0, uintptr(unsafe.Pointer(n)))
-	return h
-}
+// ---------- main ----------
 
 func main() {
 	runtime.LockOSThread()
-
-	logPath := filepath.Join(filepath.Dir(os.Args[0]), "xpanel.log")
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-	if err != nil {
-		// 备用：若同级目录无写权限，写入用户 Temp 目录
-		logPath = filepath.Join(os.TempDir(), "xpanel.log")
-		f, err = os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-	}
-	if err == nil {
+	if f, err := os.OpenFile(filepath.Join(filepath.Dir(os.Args[0]), "xpanel.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666); err == nil {
 		log.SetOutput(f)
-		log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 		defer f.Close()
 	}
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("[PANIC] %v\n%s", r, debug.Stack())
 			panic(r)
 		}
 	}()
-	log.Println("[INIT] 客户端 v5.3.1 启动中 (紧凑 450x490)...")
 
-	procSetDPIAware.Call()
+	// DPI：优先 per-monitor v2（需要 manifest，未声明时退化为 system aware，两者都不至于让控件被系统位图拉伸变形）
+	if ret, _, _ := pSetProcessDPI.Call(); ret == 0 {
+		log.Println("[DPI] SetProcessDPIAware 失败")
+	}
 
-	instRaw, _, _ := procGetModule.Call(0)
+	instRaw, _, _ := pGetModule.Call(0)
 	inst := windows.Handle(instRaw)
-	className, _ := windows.UTF16PtrFromString("XPanelWinV52")
-	wndTitle, _ := windows.UTF16PtrFromString("客户端")
 
-	hIconRaw, _, _ := procLoadIcon.Call(uintptr(inst), 100)
+	hIconRaw, _, _ := pLoadIcon.Call(uintptr(inst), 100)
 	hIcon := windows.Handle(hIconRaw)
 
-	hBgRaw, _, _ := procCreateSolid.Call(CLR_BG)
-	hBrushBg = windows.Handle(hBgRaw)
-	hCardRaw, _, _ := procCreateSolid.Call(CLR_CARD)
-	hBrushCard = windows.Handle(hCardRaw)
-	hBarRaw, _, _ := procCreateSolid.Call(CLR_BAR_BG)
-	hBrushBar = windows.Handle(hBarRaw)
-	hEditRaw, _, _ := procCreateSolid.Call(CLR_INPUT_BG)
-	hBrushEdit = windows.Handle(hEditRaw)
-
-	hPenRaw, _, _ := procCreatePen.Call(0, 1, CLR_BORDER)
-	hPenCard = windows.Handle(hPenRaw)
-
-	YAHEI := "Microsoft YaHei UI"
-	hFontAppTitle = createFont(15, true, YAHEI)
-	hFontTitle = createFont(17, true, YAHEI)
-	hFontSub = createFont(12, false, YAHEI)
-	hFontEdit = createFont(13, false, YAHEI)
-	hFontBtn = createFont(16, true, YAHEI)
-	hFontStat = createFont(13, true, YAHEI)
-	hFontVal = createFont(32, true, YAHEI)
-	hFontBig = createFont(20, true, YAHEI)
-	hFontMono = createFont(11, false, "Consolas")
+	hCursorHand, _, _ = pLoadCursor.Call(0, 32649)  // IDC_HAND
+	hCursorArrow, _, _ = pLoadCursor.Call(0, 32512) // IDC_ARROW
+	brBase = mkb(CLR_BASE)
+	brCard = mkb(CLR_CARD)
+	brInput = mkb(CLR_INPUT)
 
 	wc := WNDCLASSEX{
-		CbSize:        uint32(unsafe.Sizeof(WNDCLASSEX{})),
-		LpfnWndProc:   windows.NewCallback(wndProc),
-		HInstance:     inst,
-		HIcon:         hIcon,
-		HIconSm:       hIcon,
-		HbrBackground: hBrushBg,
-		LpszClassName: className,
+		CbSize: uint32(unsafe.Sizeof(WNDCLASSEX{})), Style: CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS | CS_DROPSHADOW,
+		LpfnWndProc: windows.NewCallback(wndProc), HInstance: inst,
+		HIcon: hIcon, HIconSm: hIcon, HbrBackground: brBase,
+		LpszClassName: mustU16("XPanelWinV7"),
 	}
-	procRegisterClass.Call(uintptr(unsafe.Pointer(&wc)))
+	pRegisterClass.Call(uintptr(unsafe.Pointer(&wc)))
 
-	scrW, _, _ := procGetSystemMetrics.Call(0)
-	scrH, _, _ := procGetSystemMetrics.Call(1)
-	posX := (int32(scrW) - WIN_W) / 2
-	posY := (int32(scrH) - WIN_H) / 2
+	WW, WH := S(LWW), S(LWH)
+	hRaw, _, _ := pCreateWindowEx.Call(0, uintptr(unsafe.Pointer(mustU16("XPanelWinV7"))), uintptr(unsafe.Pointer(mustU16("客户端"))),
+		WS_POPUP|WS_VISIBLE|WS_MINIMIZEBOX|WS_CLIPCHILDREN, 0, 0, uintptr(WW), uintptr(WH), 0, 0, uintptr(inst), 0)
+	hwndMain = windows.HWND(hRaw)
+	applyRoundCorners(hwndMain)
 
-	log.Printf("[UI] 屏幕分辨率: %dx%d, 窗口尺寸: %dx%d, 居中坐标: (%d, %d)", scrW, scrH, WIN_W, WIN_H, posX, posY)
+	// DPI 必须在窗口建立后取，所有坐标随之缩放
+	dpi, _, _ := pGetDpiForWin.Call(uintptr(hwndMain), 0)
+	if dpi >= 96 {
+		dpiScale = float64(dpi) / 96.0
+	}
+	centerWindow(hwndMain)
+	log.Printf("[INIT] %s 启动 窗口=%dx%d dpi=%d scale=%.2f", VER, S(LWW), S(LWH), dpi, dpiScale)
 
-	hwndRaw, _, _ := procCreateWindow.Call(
-		0, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(wndTitle)),
-		WS_POPUP|WS_VISIBLE|WS_MINIMIZEBOX,
-		uintptr(posX), uintptr(posY), WIN_W, WIN_H, 0, 0, uintptr(inst), 0,
-	)
-	hwndMain = windows.HWND(hwndRaw)
+	buildFonts()
 
-	staticClass, _ := windows.UTF16PtrFromString("STATIC")
-	editClass, _ := windows.UTF16PtrFromString("EDIT")
-	btnClass, _ := windows.UTF16PtrFromString("BUTTON")
-	mk := func(text string, x, y, w, h int32, font uintptr) windows.HWND {
-		t, _ := windows.UTF16PtrFromString(text)
-		r, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(t)), WS_CHILD, uintptr(x), uintptr(y), uintptr(w), uintptr(h), uintptr(hwndMain), 0, uintptr(inst), 0)
-		procSendMessage.Call(r, WM_SETFONT, font, 1)
-		return windows.HWND(r)
+	// ===== page1 =====
+	hTitle1 = mkStatic("导入节点配置", LM, P1TITLE_Y, LCW, 28, fTitle)
+	hSub1 = mkStatic("粘贴 vless:// 节点链接，进入仪表盘", LM, P1SUB_Y, LCW, 20, fSub)
+	hEdit = mkEdit(LM, EDIT_Y, LCW, EDIT_H)
+	hBtnLogin = mkButton("登录节点", LM, BTN1_Y, LCW, BTN1_H)
+	hTip = mkStatic("", LM, TIP_Y, LCW, 22, fSub)
+
+	// ===== page2 =====
+	hStatus = mkStatic("未连接", LX0+14, STATUS_Y, LXW/2-14, 24, fStat)
+	hExpire = mkStatic("到期: 查询中...", LX0+LXW/2, STATUS_Y, LXW/2, 24, fStat)
+	hLblTotal = mkStatic("累计已用流量", LX0, TOTAL_Y, LXW, 18, fSub)
+	hTraffic = mkStatic("0.00 MB", LX0, TRAFFIC_Y, LXW, 44, fVal)
+	hLblUp = mkStatic("↑ 累计上传", LX0, COL_LBL_Y, LXW/2, 18, fSub)
+	hUp = mkStatic("0.00 MB", LX0, COL_VAL_Y, LXW/2, 32, fBig)
+	hLblDown = mkStatic("↓ 累计下载", LX0+LXW/2, COL_LBL_Y, LXW/2, 18, fSub)
+	hDown = mkStatic("0.00 MB", LX0+LXW/2, COL_VAL_Y, LXW/2, 32, fBig)
+	hBtnConn = mkButton("启动加速", LM, BTN2_Y, LCW, BTN2_H)
+	hBtnSwitch = mkButton("更换节点", LM, BTN3_Y, LCW, BTN3_H)
+	hFooter = mkStatic("系统代理 · 本地 Socks 10808 / Http 10809", LM, FOOTER_Y, LCW, 20, fSub)
+
+	// 按钮样式表：Fluent 三态纯色。
+	// accent #0078D4，hover #106EBE，press #005A9E。
+	btnStyles[hBtnLogin] = btnStyle{
+		fill: CLR_ACCENT, hover: CLR_ACCENT_H, press: CLR_ACCENT_P,
+		border: CLR_ACCENT_P, txt: 0xFFFFFF, font: fBtn}
+	btnStyles[hBtnConn] = btnStyle{
+		fill: CLR_ACCENT, hover: CLR_ACCENT_H, press: CLR_ACCENT_P,
+		border: CLR_ACCENT_P, txt: 0xFFFFFF, font: fBtn}
+	btnStyles[hBtnSwitch] = btnStyle{
+		fill: 0xF4F5F8, hover: 0xECEDF1, press: 0xE2E4E9,
+		border: 0xD0D5DD, txt: 0x2B2B2B, font: fStat}
+
+	// ===== 底栏速度 =====
+	hSpeed = mkStatic(fmt.Sprintf("↑ 0 B/s  ↓ 0 B/s · 客户端 %s", VER), LM, LWH-27, LCW, 20, fMono)
+	pShowWindow.Call(uintptr(hSpeed), SW_SHOW)
+
+	page1 = ptrs(&hTitle1, &hSub1, &hEdit, &hBtnLogin, &hTip)
+	page2 = ptrs(&hStatus, &hExpire, &hLblTotal, &hTraffic, &hLblUp, &hUp, &hLblDown, &hDown, &hBtnConn, &hBtnSwitch, &hFooter)
+
+	// 按钮命中矩形登记一次，hover 命中判定只读这张表。
+	// 之前 hover 依赖子按钮自己发的 WM_MOUSELEAVE，实测移开鼠标后高亮粘住不放。
+	btnRects = []rectSpec{
+		{hBtnLogin, LM, BTN1_Y, LCW, BTN1_H},
+		{hBtnConn, LM, BTN2_Y, LCW, BTN2_H},
+		{hBtnSwitch, LM, BTN3_Y, LCW, BTN3_H},
 	}
 
-	// ==================== PAGE 1（登录/导入节点） ====================
-	hwndPage1Title = mk("导入节点配置", 24, 62, 300, 24, hFontTitle)
-	hwndPage1Sub = mk("粘贴 vless:// 节点链接，进入仪表盘", 24, 86, 402, 18, hFontSub)
-
-	// 输入卡片 (x=24, y=108, w=402, h=200) -> 文本框 (x=38, y=122, w=374, h=172)
-	hEdit, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(editClass)), 0, WS_CHILD|WS_VISIBLE|WS_BORDER|ES_MULTILINE|ES_AUTOVSCROLL, 38, 122, WIN_W-76, 172, uintptr(hwndMain), 0, uintptr(inst), 0)
-	hwndEdit = windows.HWND(hEdit)
-	procSendMessage.Call(uintptr(hwndEdit), WM_SETFONT, hFontEdit, 1)
-
-	btnLgText, _ := windows.UTF16PtrFromString("登 录 节 点")
-	hBtnLg, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnLgText)), WS_CHILD|WS_VISIBLE|BS_OWNERDRAW, 24, 330, WIN_W-48, 48, uintptr(hwndMain), 0, uintptr(inst), 0)
-	hwndBtnLogin = windows.HWND(hBtnLg)
-
-	hwndLoginTip = mk("", 24, 390, WIN_W-48, 20, hFontSub)
-
-	// ==================== PAGE 2（仪表盘主面板） ====================
-	hwndStatus = mk("● 未连接", 40, 72, 150, 20, hFontStat)
-	hwndExpire = mk("到期: 查询中...", 230, 72, 180, 20, hFontStat)
-
-	hwndLblTotal = mk("累计已用流量", 40, 100, 120, 16, hFontSub)
-
-	hTrafficR, _ := windows.UTF16PtrFromString("0.00 MB")
-	hTraffic, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(hTrafficR)), WS_CHILD, 40, 118, 370, 40, uintptr(hwndMain), 0, uintptr(inst), 0)
-	hwndTraffic = windows.HWND(hTraffic)
-	procSendMessage.Call(uintptr(hwndTraffic), WM_SETFONT, hFontVal, 1)
-
-	// 下半部双列统计 (y=184)
-	hwndLblUp = mk("↑ 累计上传", 40, 184, 140, 16, hFontSub)
-	hwndUp = mk("0.00 MB", 40, 202, 180, 28, hFontBig)
-
-	hwndLblDown = mk("↓ 累计下载", 230, 184, 140, 16, hFontSub)
-	hwndDown = mk("0.00 MB", 230, 202, 180, 28, hFontBig)
-
-	// 连接主按钮
-	btnConnText, _ := windows.UTF16PtrFromString("启 动 加 速")
-	hBtnConn, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnConnText)), WS_CHILD|BS_OWNERDRAW, 24, 288, WIN_W-48, 50, uintptr(hwndMain), 0, uintptr(inst), 0)
-	hwndBtnConnect = windows.HWND(hBtnConn)
-
-	// 次要按钮：切换节点
-	btnSwText, _ := windows.UTF16PtrFromString("更换节点")
-	hBtnSw, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(btnClass)), uintptr(unsafe.Pointer(btnSwText)), WS_CHILD|BS_OWNERDRAW, 24, 348, WIN_W-48, 40, uintptr(hwndMain), 0, uintptr(inst), 0)
-	hwndBtnSwitch = windows.HWND(hBtnSw)
-
-	// 底部辅助说明
-	hwndFooterDesc = mk("系统代理 · 本地 Socks 10808 / Http 10809", 24, 402, WIN_W-48, 18, hFontSub)
-
-	// 底部速度栏
-	hSpeedR, _ := windows.UTF16PtrFromString("↑ 0 B/s  ↓ 0 B/s · 客户端 v5.3.1")
-	hSpeed, _, _ := procCreateWindow.Call(0, uintptr(unsafe.Pointer(staticClass)), uintptr(unsafe.Pointer(hSpeedR)), WS_CHILD|WS_VISIBLE, 14, WIN_H-27, WIN_W-28, 18, uintptr(hwndMain), 0, uintptr(inst), 0)
-	hwndSpeedBar = windows.HWND(hSpeed)
-	procSendMessage.Call(uintptr(hwndSpeedBar), WM_SETFONT, hFontMono, 1)
-
-	// 历史节点恢复
 	if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\XPanel`, registry.QUERY_VALUE); err == nil {
 		if s, _, err := k.GetStringValue("link"); err == nil && s != "" {
-			setText(hwndEdit, s)
-			log.Println("[INIT] 成功恢复上次使用的节点链接")
+			setText(hEdit, s)
 		}
 		k.Close()
 	}
 
 	switchPage(1)
 	go pollTraffic()
-	log.Println("[INIT] UI 界面初始化完成，进入消息主循环")
+	log.Printf("[BTN_LAYOUT] 栅格规划: 窗口=%dx%d, 边距LM=%d, 统一宽度LCW=%d", LWW, LWH, LM, LCW)
+	log.Printf("[BTN_LAYOUT] 按钮1 [登录节点]: 逻辑=(%d,%d) %dx%d | 物理=(%d,%d) %dx%d", LM, BTN1_Y, LCW, BTN1_H, S(LM), S(BTN1_Y), S(LCW), S(BTN1_H))
+	log.Printf("[BTN_LAYOUT] 按钮2 [启动加速]: 逻辑=(%d,%d) %dx%d | 物理=(%d,%d) %dx%d", LM, BTN2_Y, LCW, BTN2_H, S(LM), S(BTN2_Y), S(LCW), S(BTN2_H))
+	log.Printf("[BTN_LAYOUT] 按钮3 [更换节点]: 逻辑=(%d,%d) %dx%d | 物理=(%d,%d) %dx%d", LM, BTN3_Y, LCW, BTN3_H, S(LM), S(BTN3_Y), S(LCW), S(BTN3_H))
+	log.Printf("[BTN_LAYOUT] 标题栏控制 [最小化]: 宽=%d 高=%d | [关闭]: 宽=%d 高=%d", S(44), S(LTITLE), S(44), S(LTITLE))
+
+	log.Println("[INIT] UI 就绪")
 
 	var msg MSG
 	for {
-		r, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		r, _, _ := pGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
 		if r == 0 || int32(r) == -1 {
 			break
 		}
-		procTranslate.Call(uintptr(unsafe.Pointer(&msg)))
-		procDispatch.Call(uintptr(unsafe.Pointer(&msg)))
+		pTranslateMsg.Call(uintptr(unsafe.Pointer(&msg)))
+		pDispatchMsg.Call(uintptr(unsafe.Pointer(&msg)))
 	}
 }
+
+func centerWindow(hwnd windows.HWND) {
+	var rc RECT
+	pGetWindowRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&rc)))
+	ww, wh := rc.R-rc.L, rc.B-rc.T
+	scrW, _, _ := pGetSysMetrics.Call(0)
+	scrH, _, _ := pGetSysMetrics.Call(1)
+	x := (int32(scrW) - ww) / 2
+	y := (int32(scrH) - wh) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	pMoveWindow.Call(uintptr(hwnd), uintptr(x), uintptr(y), uintptr(ww), uintptr(wh), 1)
+	log.Printf("[BTN_LAYOUT] 居中: 窗口=%dx%d 屏幕=%dx%d 位置=(%d,%d)", ww, wh, scrW, scrH, x, y)
+}
+
+func buildFonts() {
+	Y := "Microsoft YaHei UI"
+	fAppTitle = createFont(14, true, Y)
+	fTitle = createFont(20, true, Y)
+	fSub = createFont(13, false, Y)
+	fEdit = createFont(14, false, Y)
+	fBtn = createFont(16, true, Y)
+	fStat = createFont(14, true, Y)
+	fVal = createFont(36, true, Y)
+	fBig = createFont(23, true, Y)
+	fMono = createFont(11, false, "Consolas")
+}
+
+func ptrs(hs ...*windows.HWND) []*windows.HWND { return hs }
