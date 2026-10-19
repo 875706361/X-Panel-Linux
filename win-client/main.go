@@ -749,24 +749,13 @@ func paint(hdc uintptr) {
 	pSelectObject.Call(hdc, fAppTitle)
 	// 标题栏文字按实测字高垂直居中，与登录按钮同一套算法。
 	var tsize struct{ Cx, Cy int32 }
-	titleStr := "X-Panel"
+	titleStr := "客户端"
 	tt := mustU16(titleStr)
 	tw := u16Len(titleStr)
 	pGetTextExtent.Call(hdc, uintptr(unsafe.Pointer(tt)), uintptr(tw), uintptr(unsafe.Pointer(&tsize)))
 	ttr := RECT{S(38), (TL-tsize.Cy)/2 + S(1), WW - S(96), 0}
 	ttr.B = ttr.T + tsize.Cy
 	pDrawText.Call(hdc, uintptr(unsafe.Pointer(tt)), uintptr(tw), uintptr(unsafe.Pointer(&ttr)), DT_SINGLELINE)
-	// 副标题：紧跟主标题右侧，冷灰小字
-	pSetTextColor.Call(hdc, uintptr(CLR_FAINT))
-	pSelectObject.Call(hdc, fSub)
-	subStr := "客户端"
-	st := mustU16(subStr)
-	sw := u16Len(subStr)
-	var ssize struct{ Cx, Cy int32 }
-	pGetTextExtent.Call(hdc, uintptr(unsafe.Pointer(st)), uintptr(sw), uintptr(unsafe.Pointer(&ssize)))
-	sr := RECT{S(38) + S(64), (TL-ssize.Cy)/2 + S(1), WW - S(96), 0}
-	sr.B = sr.T + ssize.Cy
-	pDrawText.Call(hdc, uintptr(unsafe.Pointer(st)), uintptr(sw), uintptr(unsafe.Pointer(&sr)), DT_SINGLELINE)
 
 	// 最小化按钮区：Fluent 是悬浮微灰、无图标描边变化
 	mr := RECT{WW - S(88), 0, WW - S(44), TL}
