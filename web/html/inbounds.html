@@ -1036,6 +1036,7 @@
         }
       },
       setInbounds(dbInbounds) {
+        dbInbounds.sort((a, b) => a.id - b.id); // id 升序，新加的入站排最后
         this.inbounds.splice(0);
         this.dbInbounds.splice(0);
         this.clientCount.splice(0);
