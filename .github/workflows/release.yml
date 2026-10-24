@@ -144,6 +144,6 @@ jobs:
           asset_name: x-ui-linux-${{ matrix.platform }}.tar.gz
           overwrite: true
           # 如果这是预发布版本，可以此行注释
-          prerelease: true  
+          prerelease: false  
 
 
