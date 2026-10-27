@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
-	"bufio"
 	"os/signal"
-	"strings"
+//	"os/exec"
+//	"strings"
 	"syscall"
 	_ "unsafe"
 	// 中文注释: 新增了 time 和 x-ui/job 的导入，这是运行定时任务所必需的包
@@ -534,59 +533,9 @@ func migrateDb() {
 	fmt.Println("Migration done! ------------>>迁移完成！")
 }
 
-// 交互式管理菜单（3x-ui 风格），直接运行 x-ui 且无参数时进入
-func runMenu() {
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Println()
-		fmt.Println("1. 重启面板服务")
-		fmt.Println("2. 查看当前设置")
-		fmt.Println("3. 修改登录用户名/密码")
-		fmt.Println("4. 修改面板端口")
-		fmt.Println("5. 重置全部设置")
-		fmt.Println("0. 退出")
-		fmt.Print("请输入选项: ")
-		line, _ := reader.ReadString('\n')
-		choice := strings.TrimSpace(line)
-		switch choice {
-		case "1":
-			if err := exec.Command("systemctl", "restart", "x-ui").Run(); err != nil {
-				fmt.Println("重启失败（重启失败）:", err)
-			} else {
-				fmt.Println("面板服务已重启 ------>>重启成功")
-			}
-		case "2":
-			showSetting(true)
-		case "3":
-			fmt.Print("新用户名: ")
-			u, _ := reader.ReadString('\n')
-			fmt.Print("新密码: ")
-			p, _ := reader.ReadString('\n')
-			updateSetting(0, strings.TrimSpace(u), strings.TrimSpace(p), "", "", false)
-			exec.Command("systemctl", "restart", "x-ui").Run()
-		case "4":
-			fmt.Print("新端口: ")
-			l, _ := reader.ReadString('\n')
-			var port int
-			if _, err := fmt.Sscanf(strings.TrimSpace(l), "%d", &port); err != nil || port <= 0 || port > 65535 {
-				fmt.Println("无效端口（无效端口）")
-			} else {
-				updateSetting(port, "", "", "", "", false)
-				exec.Command("systemctl", "restart", "x-ui").Run()
-			}
-		case "5":
-			resetSetting()
-		case "0":
-			return
-		default:
-			fmt.Println("无效选项（无效选项）")
-		}
-	}
-}
-
 func main() {
 	if len(os.Args) < 2 {
-		runMenu()
+		runWebServer()
 		return
 	}
 
