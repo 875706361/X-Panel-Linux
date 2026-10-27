@@ -48,3 +48,4 @@ app/src/main/jniLibs/*/*.so
 /x-ui-bin
 /x-ui-new
 /x-ui.new
+x-panel
