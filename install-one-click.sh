@@ -56,6 +56,7 @@ rm -rf "$INSTALL_DIR"
 tar -xzf "$TMP/package.tar.gz" -C /usr/local
 [[ -x "$INSTALL_DIR/x-ui" ]] || fail "安装包缺少 x-ui 二进制"
 chmod +x "$INSTALL_DIR/x-ui" "$INSTALL_DIR/bin/"* 2>/dev/null || true
+ln -sf "$INSTALL_DIR/x-ui" /usr/bin/x-ui
 
 if [[ ! -f /etc/x-ui/x-ui.db ]]; then
   mkdir -p /etc/x-ui
