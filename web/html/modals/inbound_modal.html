@@ -153,11 +153,16 @@
                 }
             },
             'inModal.inbound.stream.security'(newVal, oldVal) {
-                // 当安全设置从 reality/tls 更改为 none 时清除 flow
-                if (inModal.inbound.protocol == Protocols.VLESS && !inModal.inbound.canEnableTlsFlow()) {
-                    inModal.inbound.settings.vlesses.forEach(client => {
-                        client.flow = "";
-                    });
+                if (inModal.inbound.protocol == Protocols.VLESS) {
+                    if (inModal.inbound.canEnableTlsFlow()) {
+                        inModal.inbound.settings.vlesses.forEach(client => {
+                            if (!client.flow) client.flow = "xtls-rprx-vision";
+                        });
+                    } else {
+                        inModal.inbound.settings.vlesses.forEach(client => {
+                            client.flow = "";
+                        });
+                    }
                 }
             },
             // 确保启用 vision 流时始终初始化 testseed
