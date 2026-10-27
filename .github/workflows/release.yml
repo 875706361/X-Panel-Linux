@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-
     tags:
       - 'v*'
     paths:
@@ -23,7 +22,7 @@ on:
 
 jobs:
   # ===============================================================
-  # Linux 平台的构建任务 (这是原有的任务，保持不变)
+  # Linux 平台的构建任务
   # ===============================================================
   build-linux:
     name: Build for Linux
@@ -91,7 +90,7 @@ jobs:
           cd x-ui/bin
           
           # Download dependencies
-          Xray_URL="https://github.com/XTLS/Xray-core/releases/download/v26.2.2/"
+          Xray_URL="https://github.com/XTLS/Xray-core/releases/download/v26.9.9/"
           if [ "${{ matrix.platform }}" == "amd64" ]; then
             wget -q ${Xray_URL}Xray-linux-64.zip
             unzip Xray-linux-64.zip
@@ -143,7 +142,82 @@ jobs:
           file: x-ui-linux-${{ matrix.platform }}.tar.gz
           asset_name: x-ui-linux-${{ matrix.platform }}.tar.gz
           overwrite: true
-          # 如果这是预发布版本，可以此行注释
-          prerelease: false  
+          prerelease: false
 
+  # ===============================================================
+  # Windows 平台的构建任务
+  # ===============================================================
+  build-windows:
+    name: Build for Windows
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        platform:
+          - amd64
+          - 386
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
 
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Build X-Panel for Windows
+        shell: pwsh
+        run: |
+          $env:GOOS = "windows"
+          $env:GOARCH = "${{ matrix.platform }}"
+          $env:CGO_ENABLED = "0"
+
+          go build -ldflags "-w -s" -o x-ui-release.exe -v main.go
+
+          mkdir x-ui
+          Move-Item -Path .\x-ui-release.exe -Destination .\x-ui\x-ui.exe
+
+          mkdir x-ui\bin
+          cd x-ui\bin
+          
+          $Xray_URL="https://github.com/XTLS/Xray-core/releases/download/v26.9.9/"
+          if ("${{ matrix.platform }}" -eq "amd64") {
+            Invoke-WebRequest -Uri "${Xray_URL}Xray-windows-64.zip" -OutFile "xray.zip"
+          } elseif ("${{ matrix.platform }}" -eq "386") {
+            Invoke-WebRequest -Uri "${Xray_URL}Xray-windows-32.zip" -OutFile "xray.zip"
+          }
+          
+          Expand-Archive -Path .\xray.zip -DestinationPath .
+          Remove-Item -Path .\xray.zip
+
+          Remove-Item -Path "geoip.dat", "geosite.dat" -ErrorAction SilentlyContinue
+          Invoke-WebRequest -Uri "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat" -OutFile "geoip.dat"
+          Invoke-WebRequest -Uri "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat" -OutFile "geosite.dat"
+          Invoke-WebRequest -Uri "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip.dat" -OutFile "geoip_IR.dat"
+          Invoke-WebRequest -Uri "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite.dat" -OutFile "geosite_IR.dat"
+          Invoke-WebRequest -Uri "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat" -OutFile "geoip_RU.dat"
+          Invoke-WebRequest -Uri "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat" -OutFile "geosite_RU.dat"
+          
+          Move-Item -Path .\xray.exe -Destination "xray-windows-${{ matrix.platform }}.exe"
+          cd ..
+          
+          Copy-Item -Path ..\windows_files\* -Destination . -Recurse
+          cd ..
+
+      - name: Package to Zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path .\x-ui -DestinationPath "x-ui-windows-${{ matrix.platform }}.zip"
+
+      - name: Upload files to GH release
+        uses: svenstaro/upload-release-action@v2
+        if: github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref }}
+          file: x-ui-windows-${{ matrix.platform }}.zip
+          asset_name: x-ui-windows-${{ matrix.platform }}.zip
+          overwrite: true
+          prerelease: false
