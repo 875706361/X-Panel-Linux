@@ -189,15 +189,6 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		return inbound, false, err
 	}
 
-	// 自动为 VLESS 协议的 clients 注入 xtls-rprx-vision 流控
-	if inbound.Protocol == "vless" && len(clients) > 0 {
-		for i := range clients {
-			if clients[i].Flow == "" {
-				clients[i].Flow = "xtls-rprx-vision"
-			}
-		}
-	}
-
 	// 中文注释：确保客户端设置中包含创建和更新时间戳
 	if len(clients) > 0 {
 		var settings map[string]any
@@ -577,11 +568,6 @@ func (s *InboundService) AddInboundClient(data *model.Inbound) (bool, error) {
 				cm["created_at"] = nowTs
 			}
 			cm["updated_at"] = nowTs
-
-			// 自动补齐 VLESS 的 flow 为 xtls-rprx-vision
-			if flowVal, okFlow := cm["flow"].(string); !okFlow || flowVal == "" {
-				cm["flow"] = "xtls-rprx-vision"
-			}
 
 			// ↓↓↓↓↓↓  【重要补充】在这里手动确保 SpeedLimit 被写入数据库 ↓↓↓↓↓↓
             // clients[i] 和 interfaceClients[i] 是一一对应的

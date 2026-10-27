@@ -2063,7 +2063,7 @@ Inbound.VLESSSettings = class extends Inbound.Settings {
 Inbound.VLESSSettings.VLESS = class extends XrayCommonClass {
     constructor(
         id = RandomUtil.randomUUID(),
-        flow = 'xtls-rprx-vision',
+        flow = '',
         email = RandomUtil.randomLowerAndNum(8),
         limitIp = 0,
         speedLimit = 0, // <--- 中文注释: 新增 speedLimit 属性
