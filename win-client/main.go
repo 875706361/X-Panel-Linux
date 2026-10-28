@@ -117,7 +117,7 @@ func applyRoundCorners(h windows.HWND) {
 	pDwmSetWindowAttr.Call(uintptr(h), DWMWA_WINDOW_CORNER_PREFERENCE, uintptr(unsafe.Pointer(&pref)), 4)
 }
 
-const PANEL_BASE = "http://67.215.255.156:13688"
+const PANEL_BASE = "https://23.144.20.121:1111/clay"
 
 var (
 	dwmapi            = windows.NewLazySystemDLL("dwmapi.dll")

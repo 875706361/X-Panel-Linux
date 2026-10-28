@@ -207,6 +207,23 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 
 	engine := gin.Default()
 
+	// 全局多路径容错公开接口 (app 客户端免登录查流量)
+	handlePubTraffic := func(c *gin.Context) {
+		id := c.Param("id")
+		svc := &service.InboundService{}
+		traffics, err := svc.GetClientTrafficByID(id)
+		if err != nil || len(traffics) == 0 {
+			c.JSON(http.StatusOK, gin.H{"success": false, "msg": "not found"})
+			return
+		}
+		t := traffics[0]
+		c.JSON(http.StatusOK, gin.H{"success": true, "obj": gin.H{
+			"up": t.Up, "down": t.Down, "total": t.Total, "expiryTime": t.ExpiryTime, "enable": t.Enable, "email": t.Email,
+		}})
+	}
+	engine.GET("/pub/traffic/:id", handlePubTraffic)
+	engine.GET("/panel/pub/traffic/:id", handlePubTraffic)
+
 	webDomain, err := s.settingService.GetWebDomain()
 	if err != nil {
 		return nil, err

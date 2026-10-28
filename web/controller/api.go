@@ -46,6 +46,7 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 	// 公开查询: 按 uuid 查流量/到期, 无需登录 (app 用)
 	pub := g.Group("/panel/pub")
 	pub.GET("/traffic/:id", a.PubTrafficByID)
+	g.GET("/pub/traffic/:id", a.PubTrafficByID)
 }
 
 // 公开查询接口: GET /panel/pub/traffic/:id  (id = 客户端 uuid)
