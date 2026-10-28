@@ -1495,8 +1495,8 @@ class Inbound extends XrayCommonClass {
 
         else if (security === 'reality') {
             params.set("security", "reality");
-            params.set("pbk", this.stream.reality.settings.publicKey);
-            params.set("fp", this.stream.reality.settings.fingerprint);
+            params.set("pbk", this.stream.reality.settings?.publicKey || '');
+            params.set("fp", this.stream.reality.settings?.fingerprint || 'chrome');
             if (!ObjectUtil.isArrEmpty(this.stream.reality.serverNames)) {
                 params.set("sni", this.stream.reality.serverNames.split(",")[0]);
             }
@@ -1674,8 +1674,8 @@ class Inbound extends XrayCommonClass {
 
         else if (security === 'reality') {
             params.set("security", "reality");
-            params.set("pbk", this.stream.reality.settings.publicKey);
-            params.set("fp", this.stream.reality.settings.fingerprint);
+            params.set("pbk", this.stream.reality.settings?.publicKey || '');
+            params.set("fp", this.stream.reality.settings?.fingerprint || 'chrome');
             if (!ObjectUtil.isArrEmpty(this.stream.reality.serverNames)) {
                 params.set("sni", this.stream.reality.serverNames.split(",")[0]);
             }
