@@ -231,38 +231,10 @@ func (s *InboundService) AddInbound(inbound *model.Inbound) (*model.Inbound, boo
 		}
 	}
 
-	// =================================================================
-	// 中文注释：【新增逻辑】开始：手动计算和分配 ID
-	// =================================================================
-	// 1. 查询数据库中所有已存在的入站规则的 ID
-	var existingIDs []int
-	//    使用 Pluck 方法可以更高效地只查询出 id 这一列，而不是整个对象
-	if err := database.GetDB().Model(&model.Inbound{}).Pluck("id", &existingIDs).Error; err != nil {
-		return inbound, false, err
-	}
-
-	// 2. 对所有已存在的 ID 进行升序排序
-	sort.Ints(existingIDs)
-
-	// 3. 查找第一个可用的、空缺的 ID
-	//    我们从 1 开始作为期望的 ID 进行检查。
-	//    例如，如果 ID 列表是 [1, 2, 4, 5]，当 nextID 是 3 时，它在列表中找不到匹配的 id=3，循环就会中断，nextID 就确定为 3。
-	//    如果 ID 列表是 [1, 2, 3]，循环结束后 nextID 会是 4。
-	nextID := 1
-	for _, id := range existingIDs {
-		if id == nextID {
-			nextID++
-		} else {
-			// 找到了第一个不连续的空缺
-			break
-		}
-	}
-
-	// 4. 将计算出的可用 ID 赋值给即将创建的入站对象
-	inbound.Id = nextID
-	// =================================================================
-	// 中文注释：【新增逻辑】结束：手动计算和分配 ID
-	// =================================================================
+	// 获取当前最大 ID，递增生成新 ID，保证新加的入站永远排在最后
+	var maxID int
+	database.GetDB().Model(&model.Inbound{}).Select("COALESCE(MAX(id), 0)").Scan(&maxID)
+	inbound.Id = maxID + 1
 
 	// 中文注释：开始数据库事务
 	db := database.GetDB()
