@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"crypto/tls"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -248,6 +249,7 @@ var (
 	page       int // 1=导入节点 2=仪表盘
 	connected  bool
 	serverUUID string
+	serverAddress string
 	xray       *core.Instance
 	stateMu    sync.Mutex
 	busy       bool
@@ -1141,7 +1143,7 @@ func setSystemProxy(enable bool, addr string) {
 func handleLogin() {
 	raw := getText(hEdit)
 	log.Printf("[LOGIN] 开始解析 长度=%d", len(raw))
-	uuid, _, _, _, _, _, _, err := parseVless(raw)
+	uuid, address, _, _, _, _, _, err := parseVless(raw)
 	if err != nil {
 		log.Printf("[LOGIN] 解析失败: %v", err)
 		setText(hTip, "链接格式错误，请粘贴以 vless:// 开头的完整节点链接")
@@ -1149,6 +1151,7 @@ func handleLogin() {
 	}
 	log.Printf("[LOGIN] 解析成功，切页")
 	serverUUID = uuid
+	serverAddress = address
 	if k, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\XPanel`, registry.ALL_ACCESS); err == nil {
 		k.SetStringValue("link", raw)
 		k.Close()
@@ -1182,6 +1185,7 @@ func startProxy() {
 		return
 	}
 	serverUUID = uuid
+	serverAddress = address
 	setText(hStatus, "正在连接...")
 	conf, err := core.LoadConfig("json", bytes.NewReader([]byte(buildXrayConfig(uuid, address, port, sni, pbk, sid, flow))))
 	if err != nil {
@@ -1236,7 +1240,16 @@ func pollTraffic() {
 		if serverUUID == "" {
 			continue
 		}
-		resp, err := http.Get(PANEL_BASE + "/panel/pub/traffic/" + serverUUID)
+		host := "23.144.20.121"
+		if serverAddress != "" {
+			host = serverAddress
+		}
+		url := fmt.Sprintf("https://%s:1111/clay/panel/pub/traffic/%s", host, serverUUID)
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		client := &http.Client{Transport: tr, Timeout: 5 * time.Second}
+		resp, err := client.Get(url)
 		if err != nil {
 			continue
 		}
