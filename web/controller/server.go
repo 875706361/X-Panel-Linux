@@ -391,10 +391,10 @@ func (a *ServerController) buildApp(c *gin.Context) {
 }
 
 func (a *ServerController) downloadWindows(c *gin.Context) {
-	paths := []string{"/root/XPanel.exe", "web/assets/xpanel-windows.exe", "/usr/local/x-ui/web/assets/xpanel-windows.exe", "/root/win-client-csharp/XPanel.exe"}
+	paths := []string{"/root/客户端.exe", "/root/XPanel.exe", "web/assets/xpanel-windows.exe", "/usr/local/x-ui/web/assets/xpanel-windows.exe", "/root/win-client-csharp/客户端.exe", "/root/win-client-csharp/XPanel.exe"}
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
-			c.FileAttachment(p, "XPanel.exe")
+			c.FileAttachment(p, "客户端.exe")
 			return
 		}
 	}

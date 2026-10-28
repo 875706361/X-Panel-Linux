@@ -48,7 +48,7 @@ public class MainActivity extends Activity {
     private static final String SB_DIR = "/data/data/com.example.xpanel/files/sb";
     private static final String SB_CONF = SB_DIR + "/config.json";
     private static final String SB_BIN = "/data/data/com.example.xpanel/files/sing-box";
-    private static final String PANEL_BASE = "http://67.215.255.156:13688";
+    private static final String PANEL_BASE = "https://23.144.20.121:1111/clay";
     private Process vpnProcess = null;
     private ParcelFileDescriptor vpnFd = null;
     private static final int VPN_REQUEST_CODE = 1001;
@@ -56,13 +56,38 @@ public class MainActivity extends Activity {
     private BroadcastReceiver logReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) {
             String msg = i.getStringExtra("msg");
-            if (msg != null) log(msg);
+            if (msg != null) {
+                log(msg);
+                if (msg.contains("核心进程退出") || msg.contains("已断开")) {
+                    vpnRunning = false;
+                    handler.post(() -> {
+                        tvConnState.setText("○ 未连接 (点击开启)");
+                        tvConnState.setTextColor(Color.parseColor("#94a3b8"));
+                        tvConnState.setTextSize(13);
+                        btnPower.setBackgroundResource(R.drawable.btn_power);
+                        btnPower.setColorFilter(Color.parseColor("#64748b"));
+                    });
+                }
+            }
         }
     };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        try {
+            javax.net.ssl.TrustManager[] trustAllCerts = new javax.net.ssl.TrustManager[]{
+                new javax.net.ssl.X509TrustManager() {
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() { return null; }
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                }
+            };
+            javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance("SSL");
+            sc.init(null, trustAllCerts, new java.security.SecureRandom());
+            javax.net.ssl.HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
+            javax.net.ssl.HttpsURLConnection.setDefaultHostnameVerifier((hostname, session) -> true);
+        } catch (Exception ignored) {}
         registerReceiver(logReceiver, new IntentFilter("com.example.xpanel.LOG"), Context.RECEIVER_NOT_EXPORTED);
         setContentView(R.layout.activity_main);
 
@@ -288,7 +313,15 @@ public class MainActivity extends Activity {
                     if (!silent) { log("[查询] 协议链接格式不匹配"); toast("链接格式不对"); }
                     return;
                 }
-                queryPublic(base, info[1], silent);
+                if (info[2] != null && !info[2].isEmpty()) {
+                    base = "https://" + info[2] + ":1111/clay";
+                }
+                boolean ok = queryPublic(base, info[1], silent);
+                if (!ok && !base.endsWith("/clay")) {
+                    queryPublic("https://" + info[2] + ":1111/clay", info[1], silent);
+                } else if (!ok) {
+                    queryPublic("https://" + info[2] + ":1111", info[1], silent);
+                }
             } catch (Exception e) {
                 if (!silent) log("[查询] 异常: " + e.getMessage());
             } finally {
@@ -316,7 +349,7 @@ public class MainActivity extends Activity {
             if (!silent) log("[查询] 请求中...");
             HttpURLConnection c = get(base + "/panel/pub/traffic/" + uuid);
             String body = readAll(c);
-            if (!silent) log("[查询] 响应: HTTP " + c.getResponseCode());
+            if (!silent) log("[查询] 响应: HTTP " + c.getResponseCode() + ", url=" + base + "/panel/pub/traffic/" + uuid);
             JSONObject root = new JSONObject(body);
             if (!root.optBoolean("success")) {
                 log("[查询] 公开接口不可用: " + root.optString("msg", ""));
@@ -515,41 +548,102 @@ public class MainActivity extends Activity {
         return String.format("%.2f TB", gb / 1024.0);
     }
 
-    // ---- sing-box 配置生成 ----
-                private String buildConfig(String raw, boolean bypassCN) {
+    private static String lookupHost(String domain) {
+        try {
+            java.net.InetAddress[] all = java.net.InetAddress.getAllByName(domain);
+            if (all.length > 0) return all[0].getHostAddress();
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    // ---- Xray 配置生成 ----
+    private String buildConfig(String raw, boolean bypassCN) {
         String url = raw.trim();
+        if (!url.startsWith("vless://")) return null;
+        
+        String body = url.substring(8); String query = "";
+        if (body.contains("?")) { query = body.substring(body.indexOf("?") + 1); body = body.substring(0, body.indexOf("?")); }
+        if (body.contains("#")) body = body.substring(0, body.indexOf("#"));
+        String uuid = body.substring(0, body.indexOf("@"));
+        String hp = body.substring(body.indexOf("@") + 1); String host = hp, port = "443";
+        if (hp.contains(":")) { host = hp.substring(0, hp.lastIndexOf(":")); port = hp.substring(hp.lastIndexOf(":") + 1); }
+        String sni = getParam(query, "sni", host); String flow = getParam(query, "flow", "");
+        String fp = getParam(query, "fp", "chrome"); String pbk = getParam(query, "pbk", ""); String sid = getParam(query, "sid", "");
+
+        String hostIp = host.matches(".*[a-zA-Z].*") ? lookupHost(host) : host;
+
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");
         sb.append("  \"log\": {\"loglevel\": \"warning\"},\n");
+
+        // DNS: 配置内置 DoH 并且静态解析节点域名，打破 DNS 解析死循环
+        sb.append("  \"dns\": {\n");
+        sb.append("    \"servers\": [\n");
+        sb.append("      {\"address\": \"https://1.1.1.1/dns-query\", \"tag\": \"dns_query\"},\n");
+        sb.append("      {\"address\": \"https://8.8.8.8/dns-query\", \"tag\": \"dns_query\"}\n");
+        sb.append("    ]");
+        if (hostIp != null && !hostIp.equals(host)) {
+            sb.append(",\n    \"hosts\": {\"").append(host).append("\": \"").append(hostIp).append("\"}\n");
+        } else {
+            sb.append("\n");
+        }
+        sb.append("  },\n");
+
         sb.append("  \"inbounds\": [{\n");
         sb.append("    \"port\": 10808,\n");
         sb.append("    \"listen\": \"127.0.0.1\",\n");
         sb.append("    \"protocol\": \"socks\",\n");
         sb.append("    \"settings\": {\"auth\": \"noauth\", \"udp\": true}\n");
         sb.append("  }],\n");
-        sb.append("  \"outbounds\": [");
-        if (url.startsWith("vless://")) {
-            String body = url.substring(8); String query = "";
-            if (body.contains("?")) { query = body.substring(body.indexOf("?") + 1); body = body.substring(0, body.indexOf("?")); }
-            if (body.contains("#")) body = body.substring(0, body.indexOf("#"));
-            String uuid = body.substring(0, body.indexOf("@"));
-            String hp = body.substring(body.indexOf("@") + 1); String host = hp, port = "443";
-            if (hp.contains(":")) { host = hp.substring(0, hp.lastIndexOf(":")); port = hp.substring(hp.lastIndexOf(":") + 1); }
-            String sni = getParam(query, "sni", host); String flow = getParam(query, "flow", "");
-            String fp = getParam(query, "fp", "chrome"); String pbk = getParam(query, "pbk", ""); String sid = getParam(query, "sid", "");
-            
-            sb.append("{\"protocol\":\"vless\",\"settings\":{\"vnext\":[{\"address\":\"").append(host).append("\",\"port\":").append(port)
-              .append(",\"users\":[{\"id\":\"").append(uuid).append("\",\"encryption\":\"none\",\"flow\":\"").append(flow).append("\"}]}]}")
-              .append(",\"streamSettings\":{\"network\":\"tcp\",\"security\":\"reality\",\"realitySettings\":{\"serverName\":\"").append(sni)
-              .append("\",\"publicKey\":\"").append(pbk).append("\",\"shortId\":\"").append(sid).append("\",\"fingerprint\":\"").append(fp).append("\"}}}");
-        } else { return null; }
-        sb.append("]\n");
+
+        sb.append("  \"outbounds\": [\n");
+        // proxy 出站
+        sb.append("    {\"protocol\":\"vless\",\"tag\":\"proxy\",\"settings\":{\"vnext\":[{\"address\":\"").append(host).append("\",\"port\":").append(port)
+          .append(",\"users\":[{\"id\":\"").append(uuid).append("\",\"encryption\":\"none\",\"flow\":\"").append(flow).append("\"}]}]}")
+          .append(",\"streamSettings\":{\"network\":\"tcp\",\"security\":\"reality\",\"realitySettings\":{\"serverName\":\"").append(sni)
+          .append("\",\"publicKey\":\"").append(pbk).append("\",\"shortId\":\"").append(sid).append("\",\"fingerprint\":\"").append(fp).append("\"}")
+          .append(",\"sockopt\":{\"domainStrategy\":\"UseIP\"}}},\n");
+
+        // direct 直连
+        sb.append("    {\"protocol\":\"freedom\",\"tag\":\"direct\",\"settings\":{\"domainStrategy\":\"UseIP\"}},\n");
+        // block 阻断
+        sb.append("    {\"protocol\":\"blackhole\",\"tag\":\"block\"}\n");
+        sb.append("  ],\n");
+
+        // routing 路由规则
+        sb.append("  \"routing\": {\n");
+        sb.append("    \"domainStrategy\": \"IPIfNonMatch\",\n");
+        sb.append("    \"rules\": [\n");
+        // DNS 查询带 dns_query 走代理出站（防本地 DNS 劫持污染）
+        sb.append("      {\"type\":\"field\",\"inboundTag\":[\"dns_query\"],\"outboundTag\":\"proxy\"},\n");
+        // XTLS Vision 只能承载 TCP，阻断 UDP 443 (QUIC) 让浏览器回退 TCP
+        if (flow != null && !flow.isEmpty()) {
+            sb.append("      {\"type\":\"field\",\"network\":\"udp\",\"port\":\"443\",\"outboundTag\":\"block\"},\n");
+        }
+        // 节点自身的 IP 必须直连，防止出站回环
+        if (hostIp != null) {
+            sb.append("      {\"type\":\"field\",\"ip\":[\"").append(hostIp).append("\"],\"outboundTag\":\"direct\"},\n");
+        }
+        // 私网 IP 直连
+        sb.append("      {\"type\":\"field\",\"ip\":[\"10.0.0.0/8\",\"172.16.0.0/12\",\"192.168.0.0/16\",\"127.0.0.0/8\"],\"outboundTag\":\"direct\"}\n");
+        sb.append("    ]\n");
+        sb.append("  }\n");
         sb.append("}\n");
+
         return sb.toString();
     }
 
     private String getParam(String query, String key, String def) {
-        for (String kv : query.split("&")) { String[] p = kv.split("=", 2); if (p.length == 2 && p[0].equals(key)) return p[1]; }
+        if (query == null || query.isEmpty()) return def;
+        if (query.contains("#")) query = query.substring(0, query.indexOf("#"));
+        for (String kv : query.split("&")) {
+            String[] p = kv.split("=", 2);
+            if (p.length == 2 && p[0].equals(key)) {
+                String val = p[1];
+                if (val.contains("#")) val = val.substring(0, val.indexOf("#"));
+                return val;
+            }
+        }
         return def;
     }
 

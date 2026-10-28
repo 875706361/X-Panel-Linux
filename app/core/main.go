@@ -68,6 +68,7 @@ func recvFd(sockPath string) (int, error) {
 }
 
 func main() {
+	signal.Ignore(syscall.SIGPIPE)
 	sock := flag.String("sock", "", "unix domain socket path for receiving tun fd")
 	conf := flag.String("conf", "", "xray config json file path")
 	flag.Parse()

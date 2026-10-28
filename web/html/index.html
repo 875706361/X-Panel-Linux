@@ -1287,7 +1287,7 @@ ${dateTime}
                     const blob = await res.blob();
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
-                    a.href = url; a.download = 'XPanel.exe';
+                    a.href = url; a.download = '客户端.exe';
                     document.body.appendChild(a); a.click(); a.remove();
                     URL.revokeObjectURL(url);
                     this.$message.success('Windows 客户端已开始下载');
