@@ -784,7 +784,7 @@ class RealityStreamSettings extends XrayCommonClass {
         target = 'www.athabascau.ca:443',
         serverNames = 'www.athabascau.ca',
         privateKey = '',
-        minClientVer = '',
+        minClientVer = '0.0.0',
         maxClientVer = '',
         maxTimediff = 0,
         shortIds = RandomUtil.randomShortIds(),
