@@ -47,6 +47,7 @@ func (a *ServerController) initRouter(g *gin.RouterGroup) {
 	g.GET("/getConfigJson", a.getConfigJson)
 	g.GET("/getDb", a.getDb)
 	g.GET("/buildapp", a.buildApp)
+	g.GET("/download/windows", a.downloadWindows)
 	g.GET("/getNewUUID", a.getNewUUID)
 	g.GET("/getNewX25519Cert", a.getNewX25519Cert)
 	g.GET("/getNewmldsa65", a.getNewmldsa65)
@@ -379,10 +380,23 @@ func (a *ServerController) openPort(c *gin.Context) {
 
 
 func (a *ServerController) buildApp(c *gin.Context) {
-	apkPath := "/root/xpanel-client.apk"
-	if _, err := os.Stat(apkPath); os.IsNotExist(err) {
-		c.String(http.StatusNotFound, "APK not found")
-		return
+	paths := []string{"/root/xpanel-client.apk", "web/assets/xpanel-client.apk", "/usr/local/x-ui/web/assets/xpanel-client.apk"}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			c.FileAttachment(p, "xpanel-client.apk")
+			return
+		}
 	}
-	c.FileAttachment(apkPath, "xpanel-client.apk")
+	c.String(http.StatusNotFound, "APK not found")
+}
+
+func (a *ServerController) downloadWindows(c *gin.Context) {
+	paths := []string{"/root/XPanel.exe", "web/assets/xpanel-windows.exe", "/usr/local/x-ui/web/assets/xpanel-windows.exe", "/root/win-client-csharp/XPanel.exe"}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			c.FileAttachment(p, "XPanel.exe")
+			return
+		}
+	}
+	c.String(http.StatusNotFound, "Windows client not found")
 }

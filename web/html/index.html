@@ -863,6 +863,13 @@
                 </a-list-item-meta>
                 <a-button @click="buildApp()" type="primary" icon="android" :loading="appBuilding" />
             </a-list-item>
+            <a-list-item class="ant-backup-list-item">
+                <a-list-item-meta>
+                    <template #title>下载 Windows 客户端</template>
+                    <template #description>一键下载当前 X-Panel Windows exe 客户端</template>
+                </a-list-item-meta>
+                <a-button @click="downloadWindows()" type="primary" icon="windows" :loading="winDownloading" />
+            </a-list-item>
         </a-list>
     </a-modal>
 </a-layout>
@@ -1122,6 +1129,7 @@ ${dateTime}
             showIp: false,
             ipLimitEnable: false,
             appBuilding: false,
+            winDownloading: false,
         },
         methods: {
             loading(spinning, tip = '{{ i18n "loading"}}') {
@@ -1269,6 +1277,24 @@ ${dateTime}
                     this.$message.error('下载失败: ' + e.message);
                 } finally {
                     this.appBuilding = false;
+                }
+            },
+            async downloadWindows() {
+                this.winDownloading = true;
+                try {
+                    const res = await fetch(basePath.replace(/\/$/, '') + '/panel/api/server/download/windows', {method:'GET', credentials:'same-origin'});
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'XPanel.exe';
+                    document.body.appendChild(a); a.click(); a.remove();
+                    URL.revokeObjectURL(url);
+                    this.$message.success('Windows 客户端已开始下载');
+                } catch (e) {
+                    this.$message.error('下载失败: ' + e.message);
+                } finally {
+                    this.winDownloading = false;
                 }
             },
             exportDatabase() {
