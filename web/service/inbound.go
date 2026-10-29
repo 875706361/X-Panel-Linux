@@ -2042,11 +2042,21 @@ func (s *InboundService) GetPubClientView(id string) (map[string]any, bool) {
 				continue
 			}
 			cl := clients[j]
+			ib := inbounds[i]
+			// 面板通常在「入站」层设到期/流量限额（此服 44/45 个入站有 expiry_time，
+			// 客户端层全 0），客户端层为 0 时回落到入站层，否则 App 端只会显示「不限」。
+			exp, total := cl.ExpiryTime, cl.TotalGB
+			if exp == 0 {
+				exp = ib.ExpiryTime
+			}
+			if total == 0 {
+				total = ib.Total
+			}
 			view := map[string]any{
 				"up":         int64(0),
 				"down":       int64(0),
-				"total":      cl.TotalGB,
-				"expiryTime": cl.ExpiryTime,
+				"total":      total,
+				"expiryTime": exp,
 				"enable":     cl.Enable,
 				"email":      cl.Email,
 			}
