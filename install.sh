@@ -328,6 +328,20 @@ install_free_version() {
         
         show_access_info
 
+        # 放置修复版 Windows 客户端（面板「下载 Windows 客户端」按此路径读取）
+        mkdir -p /root/win-client-csharp
+        CLIENT_URL=$(echo "$release_json" | python3 -c "import sys, json; data = json.load(sys.stdin); print(next((a.get('browser_download_url','') for a in data.get('assets', []) if a.get('name') == 'XPanel.exe'), ''))" 2>/dev/null || true)
+        if [[ -n "$CLIENT_URL" ]]; then
+            curl -sL "$CLIENT_URL" -o /root/win-client-csharp/XPanel.exe && \
+            chmod +x /root/win-client-csharp/XPanel.exe && \
+            cp -f /root/win-client-csharp/XPanel.exe /root/XPanel.exe && \
+            cp -f /root/win-client-csharp/XPanel.exe /root/客户端.exe && \
+            echo -e "${green}Windows 客户端已就位（面板内可直接下载）${plain}" || \
+            echo -e "${yellow}Windows 客户端下载失败，可手动放置到 /root/win-client-csharp/XPanel.exe${plain}"
+        else
+            echo -e "${yellow}Release 中未找到 XPanel.exe 资源，跳过客户端部署${plain}"
+        fi
+
         cp -f x-ui.service /etc/systemd/system/
         systemctl daemon-reload
         systemctl enable x-ui
