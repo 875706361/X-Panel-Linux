@@ -363,16 +363,17 @@ public class MainActivity extends Activity {
             final String fEmail = o.optString("email", "");
             final String fUp = fmtBytes(upS), fDown = fmtBytes(downS), fUsed = fmtBytes(String.valueOf(up + down));
             final String fTotal = fmtBytes(totalS);
-            final String fExp = exp > 0 ? new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm").format(new java.util.Date(exp * 1000)) : "不限";
+            final String fExp = fmtExp(exp);
             final int expColor;
             if (exp <= 0) {
                 expColor = Color.parseColor("#7a7a82");
+            } else if (exp < System.currentTimeMillis()) {
+                expColor = Color.parseColor("#757575");
             } else {
-                long daysLeft = (exp * 1000L - System.currentTimeMillis()) / 86400000L;
+                long daysLeft = (exp - System.currentTimeMillis()) / 86400000L;
                 if (daysLeft > 7) expColor = Color.parseColor("#06d6a0");
                 else if (daysLeft > 3) expColor = Color.parseColor("#ffb74d");
-                else if (daysLeft > 0) expColor = Color.parseColor("#ef5350");
-                else expColor = Color.parseColor("#757575");
+                else expColor = Color.parseColor("#ef5350");
             }
             final String fStatus = o.optBoolean("enable") ? "启用" : "停用";
             handler.post(() -> {
@@ -472,7 +473,7 @@ public class MainActivity extends Activity {
                             log("已用: " + fmtBytes(String.valueOf(up + down)) + " / " + fmtBytes(totalS));
                             if (total > 0) log("剩余: " + fmtBytes(String.valueOf(Math.max(0, total - up - down))));
                             long exp = parseLong(expS);
-                            log("到期: " + (exp > 0 ? new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm").format(new java.util.Date(exp * 1000)) : "不限"));
+                            log("到期: " + fmtExp(exp));
                             log("状态: " + enableS);
                         }
                     }
@@ -535,6 +536,13 @@ public class MainActivity extends Activity {
     }
 
     private long parseLong(String s) { try { return Long.parseLong(s); } catch (Exception e) { return 0; } }
+
+    // 面板接口的 expiryTime 单位是毫秒；0=不限, 负数=延迟生效占位, 过去=已过期
+    private String fmtExp(long ms) {
+        if (ms <= 0) return "不限";
+        if (ms < System.currentTimeMillis()) return "已过期";
+        return new java.text.SimpleDateFormat("yyyy/M/d HH:mm").format(new java.util.Date(ms));
+    }
 
     private String fmtBytes(String s) {
         long b = parseLong(s);
