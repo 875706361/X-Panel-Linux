@@ -1,0 +1,20 @@
+diff --git a/tls.go b/tls.go
+index b33301e..compat001 100644
+--- a/tls.go
++++ b/tls.go
+@@ -231,12 +231,13 @@ func Server(ctx context.Context, conn net.Conn, config *Config) (*Conn, error) {
+ 					break // ensure order
+ 				}
+ 			}
+-			if peerPub2 == nil {
+-				break // reject outdated/strange Client Hello that doesn't have X25519MLKEM768 before optional X25519
+-			}
+ 			if peerPub == nil {
+-				peerPub = peerPub2 // secondary choice: X25519 in X25519MLKEM768
++				peerPub = peerPub2
++			}
++			// Compatibility: accept legacy X25519-only ClientHello; retain REALITY auth below.
++			if peerPub == nil {
++				break
+ 			}
+ 			for peerPub != nil && config.PrivateKey != nil {
