@@ -7,15 +7,31 @@ export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
 
 # Build an Xray 26.11.9 binary with the minimal REALITY legacy-client compatibility patch.
 # The patch keeps UUID, short-id, time, version, and REALITY authentication checks.
+#
+# TARGET selects the linux platform token used by the panel's bin/ layout:
+#   amd64 arm64 386 s390x armv7 armv6 armv5   (default: amd64)
+# Output: $ROOT/dist/xray-linux-$TARGET
 
 XRAY_VERSION="${XRAY_VERSION:-v26.11.9}"
 REALITY_COMMIT="${REALITY_COMMIT:-4bb46b2afd8b4f1f082fbaccae34fd3c7a3f8973}"
+TARGET="${TARGET:-amd64}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="${WORK:-${TMPDIR:-/tmp}/xray-compat-build}"
-OUT="${OUT:-${ROOT}/dist/xray-linux-amd64-compat}"
+OUT="${OUT:-${ROOT}/dist/xray-linux-${TARGET}}"
+
+case "$TARGET" in
+    amd64) GOARCH_="amd64"; GOARM_="" ;;
+    arm64) GOARCH_="arm64"; GOARM_="" ;;
+    386)   GOARCH_="386";   GOARM_="" ;;
+    s390x) GOARCH_="s390x"; GOARM_="" ;;
+    armv7) GOARCH_="arm";   GOARM_="7" ;;
+    armv6) GOARCH_="arm";   GOARM_="6" ;;
+    armv5) GOARCH_="arm";   GOARM_="5" ;;
+    *) echo "unsupported TARGET '$TARGET' (amd64|arm64|386|s390x|armv7|armv6|armv5)" >&2; exit 1 ;;
+esac
 
 rm -rf "$WORK"
-mkdir -p "$WORK"
+mkdir -p "$WORK" "$(dirname "$OUT")"
 git clone --depth 1 --branch "$XRAY_VERSION" https://github.com/XTLS/Xray-core.git "$WORK/xray"
 git clone --depth 1 https://github.com/XTLS/REALITY.git "$WORK/reality"
 cd "$WORK/reality"
@@ -35,6 +51,15 @@ cd "$WORK/xray"
 go mod edit -replace="github.com/xtls/reality=../reality"
 go mod edit -fmt
 go mod tidy
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -p=1 -trimpath -ldflags='-s -w' -o "$OUT" ./main
-"$OUT" version
+
+build_env=(CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH_")
+[ -n "$GOARM_" ] && build_env+=(GOARM="$GOARM_")
+env "${build_env[@]}" go build -p=1 -trimpath -ldflags='-s -w' -o "$OUT" ./main
+
+echo "built $OUT for linux/$GOARCH_${GOARM_:+ armv$GOARM_}"
+# Non-native targets cannot be executed here, so verify from the embedded build info.
+go version -m "$OUT" | grep -E 'GOARCH=|GOARM=|vcs.modified='
+if [ "$GOARCH_" = "$(go env GOHOSTARCH)" ] && [ -z "$GOARM_" ]; then
+    "$OUT" version
+fi
 sha256sum "$OUT"
