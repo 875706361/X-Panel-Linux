@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Xray v26.11.9 needs Go >= 1.27; let the local toolchain fetch it when the
+# installed Go is older instead of failing with "go.mod requires go >= 1.27".
+export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
+
 # Build an Xray 26.11.9 binary with the minimal REALITY legacy-client compatibility patch.
 # The patch keeps UUID, short-id, time, version, and REALITY authentication checks.
 

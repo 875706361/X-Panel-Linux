@@ -110,6 +110,7 @@ jobs:
             mv xray "xray-linux-${{ matrix.platform }}"
           fi
           if [ "${{ matrix.platform }}" = "amd64" ]; then
+            export GOTOOLCHAIN=auto
             ../../scripts/build_xray_reality_compat.sh
             install -m 0755 ../../dist/xray-linux-amd64-compat xray-linux-amd64
             ./xray-linux-amd64 version
