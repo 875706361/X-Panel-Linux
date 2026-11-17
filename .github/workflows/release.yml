@@ -92,28 +92,13 @@ jobs:
           cd x-ui/bin
           
           # Download dependencies
-          Xray_URL="https://github.com/XTLS/Xray-core/releases/download/v26.9.9/"
-          ZIP=""
-          case "${{ matrix.platform }}" in
-            amd64) : ;;   # patched REALITY-compat build below
-            arm64) ZIP="Xray-linux-arm64-v8a.zip" ;;
-            armv7) ZIP="Xray-linux-arm32-v7a.zip" ;;
-            armv6) ZIP="Xray-linux-arm32-v6.zip" ;;
-            386)   ZIP="Xray-linux-32.zip" ;;
-            armv5) ZIP="Xray-linux-arm32-v5.zip" ;;
-            s390x) ZIP="Xray-linux-s390x.zip" ;;
-          esac
-          if [ -n "$ZIP" ]; then
-            wget -q "${Xray_URL}${ZIP}"
-            unzip "${ZIP}"
-            rm -f "${ZIP}"
-            mv xray "xray-linux-${{ matrix.platform }}"
-          fi
+          # Patched Xray core built from source for every linux platform, so no
+          # architecture silently ships the stock core without the REALITY patch.
+          export GOTOOLCHAIN=auto
+          TARGET="${{ matrix.platform }}" ../../scripts/build_xray_reality_compat.sh
+          install -m 0755 "../../dist/xray-linux-${{ matrix.platform }}" "xray-linux-${{ matrix.platform }}"
+          go version -m "xray-linux-${{ matrix.platform }}" | grep -F 'vcs.modified=true'
           if [ "${{ matrix.platform }}" = "amd64" ]; then
-            export GOTOOLCHAIN=auto
-            ../../scripts/build_xray_reality_compat.sh
-            install -m 0755 ../../dist/xray-linux-amd64-compat xray-linux-amd64
-            ./xray-linux-amd64 version
             ./xray-linux-amd64 version | grep -F '26.11.9' | grep -F -- '-dirty'
           fi
           rm -f geoip.dat geosite.dat
@@ -136,83 +121,5 @@ jobs:
           tag: ${{ github.ref }}
           file: x-ui-linux-${{ matrix.platform }}.tar.gz
           asset_name: x-ui-linux-${{ matrix.platform }}.tar.gz
-          overwrite: true
-          prerelease: false
-
-  # ===============================================================
-  # Windows 平台的构建任务
-  # ===============================================================
-  build-windows:
-    name: Build for Windows
-    permissions:
-      contents: write
-    strategy:
-      matrix:
-        platform:
-          - amd64
-          - 386
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          check-latest: true
-
-      - name: Build X-Panel for Windows
-        shell: pwsh
-        run: |
-          $env:GOOS = "windows"
-          $env:GOARCH = "${{ matrix.platform }}"
-          $env:CGO_ENABLED = "0"
-
-          go build -ldflags "-w -s" -o x-ui-release.exe -v main.go
-
-          mkdir x-ui
-          Move-Item -Path .\x-ui-release.exe -Destination .\x-ui\x-ui.exe
-
-          mkdir x-ui\bin
-          cd x-ui\bin
-          
-          $Xray_URL="https://github.com/XTLS/Xray-core/releases/download/v26.9.9/"
-          if ("${{ matrix.platform }}" -eq "amd64") {
-            Invoke-WebRequest -Uri "${Xray_URL}Xray-windows-64.zip" -OutFile "xray.zip"
-          } elseif ("${{ matrix.platform }}" -eq "386") {
-            Invoke-WebRequest -Uri "${Xray_URL}Xray-windows-32.zip" -OutFile "xray.zip"
-          }
-          
-          Expand-Archive -Path .\xray.zip -DestinationPath .
-          Remove-Item -Path .\xray.zip
-
-          Remove-Item -Path "geoip.dat", "geosite.dat" -ErrorAction SilentlyContinue
-          Invoke-WebRequest -Uri "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat" -OutFile "geoip.dat"
-          Invoke-WebRequest -Uri "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat" -OutFile "geosite.dat"
-          Invoke-WebRequest -Uri "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip.dat" -OutFile "geoip_IR.dat"
-          Invoke-WebRequest -Uri "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite.dat" -OutFile "geosite_IR.dat"
-          Invoke-WebRequest -Uri "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat" -OutFile "geoip_RU.dat"
-          Invoke-WebRequest -Uri "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat" -OutFile "geosite_RU.dat"
-          
-          Move-Item -Path .\xray.exe -Destination "xray-windows-${{ matrix.platform }}.exe"
-          cd ..
-          
-          Copy-Item -Path ..\windows_files\* -Destination . -Recurse
-          cd ..
-
-      - name: Package to Zip
-        shell: pwsh
-        run: |
-          Compress-Archive -Path .\x-ui -DestinationPath "x-ui-windows-${{ matrix.platform }}.zip"
-
-      - name: Upload files to GH release
-        uses: svenstaro/upload-release-action@v2
-        if: github.event_name == 'release' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref }}
-          file: x-ui-windows-${{ matrix.platform }}.zip
-          asset_name: x-ui-windows-${{ matrix.platform }}.zip
           overwrite: true
           prerelease: false
