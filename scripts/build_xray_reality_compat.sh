@@ -5,7 +5,7 @@ set -euo pipefail
 # The patch keeps UUID, short-id, time, version, and REALITY authentication checks.
 
 XRAY_VERSION="${XRAY_VERSION:-v26.11.9}"
-REALITY_VERSION="${REALITY_VERSION:-v0.0.0-20261108101329-4bb46b2afd8b}"
+REALITY_COMMIT="${REALITY_COMMIT:-4bb46b2afd8b4f1f082fbaccae34fd3c7a3f8973}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="${WORK:-${TMPDIR:-/tmp}/xray-compat-build}"
 OUT="${OUT:-${ROOT}/dist/xray-linux-amd64-compat}"
@@ -15,8 +15,8 @@ mkdir -p "$WORK"
 git clone --depth 1 --branch "$XRAY_VERSION" https://github.com/XTLS/Xray-core.git "$WORK/xray"
 git clone --depth 1 https://github.com/XTLS/REALITY.git "$WORK/reality"
 cd "$WORK/reality"
-git fetch --depth 1 origin 4bb46b2afd8b
-git checkout 4bb46b2afd8b
+git fetch --depth 1 origin "$REALITY_COMMIT"
+git checkout "$REALITY_COMMIT"
 python3 - <<'PY'
 from pathlib import Path
 p = Path("tls.go")

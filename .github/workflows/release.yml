@@ -19,6 +19,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'x-ui.service'
+      - 'patches/**'
+      - 'scripts/build_xray_reality_compat.sh'
 
 jobs:
   # ===============================================================
@@ -91,34 +93,27 @@ jobs:
           
           # Download dependencies
           Xray_URL="https://github.com/XTLS/Xray-core/releases/download/v26.9.9/"
-          if [ "${{ matrix.platform }}" == "amd64" ]; then
-            wget -q ${Xray_URL}Xray-linux-64.zip
-            unzip Xray-linux-64.zip
-            rm -f Xray-linux-64.zip
-          elif [ "${{ matrix.platform }}" == "arm64" ]; then
-            wget -q ${Xray_URL}Xray-linux-arm64-v8a.zip
-            unzip Xray-linux-arm64-v8a.zip
-            rm -f Xray-linux-arm64-v8a.zip
-          elif [ "${{ matrix.platform }}" == "armv7" ]; then
-            wget -q ${Xray_URL}Xray-linux-arm32-v7a.zip
-            unzip Xray-linux-arm32-v7a.zip
-            rm -f Xray-linux-arm32-v7a.zip
-          elif [ "${{ matrix.platform }}" == "armv6" ]; then
-            wget -q ${Xray_URL}Xray-linux-arm32-v6.zip
-            unzip Xray-linux-arm32-v6.zip
-            rm -f Xray-linux-arm32-v6.zip
-          elif [ "${{ matrix.platform }}" == "386" ]; then
-            wget -q ${Xray_URL}Xray-linux-32.zip
-            unzip Xray-linux-32.zip
-            rm -f Xray-linux-32.zip
-          elif [ "${{ matrix.platform }}" == "armv5" ]; then
-            wget -q ${Xray_URL}Xray-linux-arm32-v5.zip
-            unzip Xray-linux-arm32-v5.zip
-            rm -f Xray-linux-arm32-v5.zip
-          elif [ "${{ matrix.platform }}" == "s390x" ]; then
-            wget -q ${Xray_URL}Xray-linux-s390x.zip
-            unzip Xray-linux-s390x.zip
-            rm -f Xray-linux-s390x.zip
+          ZIP=""
+          case "${{ matrix.platform }}" in
+            amd64) : ;;   # patched REALITY-compat build below
+            arm64) ZIP="Xray-linux-arm64-v8a.zip" ;;
+            armv7) ZIP="Xray-linux-arm32-v7a.zip" ;;
+            armv6) ZIP="Xray-linux-arm32-v6.zip" ;;
+            386)   ZIP="Xray-linux-32.zip" ;;
+            armv5) ZIP="Xray-linux-arm32-v5.zip" ;;
+            s390x) ZIP="Xray-linux-s390x.zip" ;;
+          esac
+          if [ -n "$ZIP" ]; then
+            wget -q "${Xray_URL}${ZIP}"
+            unzip "${ZIP}"
+            rm -f "${ZIP}"
+            mv xray "xray-linux-${{ matrix.platform }}"
+          fi
+          if [ "${{ matrix.platform }}" = "amd64" ]; then
+            ../../scripts/build_xray_reality_compat.sh
+            install -m 0755 ../../dist/xray-linux-amd64-compat xray-linux-amd64
+            ./xray-linux-amd64 version
+            ./xray-linux-amd64 version | grep -F '26.11.9' | grep -F -- '-dirty'
           fi
           rm -f geoip.dat geosite.dat
           wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
@@ -127,7 +122,6 @@ jobs:
           wget -q -O geosite_IR.dat https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite.dat
           wget -q -O geoip_RU.dat https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat
           wget -q -O geosite_RU.dat https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat
-          mv xray xray-linux-${{ matrix.platform }}
           cd ../..
 
       - name: Package
