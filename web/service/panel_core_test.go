@@ -27,6 +27,11 @@ func TestPanelCoreAssetURLStaysOnOwnRepo(t *testing.T) {
 	if !strings.HasPrefix(PanelReleasesURL(), "https://api.github.com/repos/875706361/X-Panel-Linux/releases") {
 		t.Fatalf("版本列表未指向本仓库: %s", PanelReleasesURL())
 	}
+	latest := PanelCoreAssetURL("latest")
+	want := "https://github.com/875706361/X-Panel-Linux/releases/latest/download/x-ui-linux-" + PanelCoreAssetArch() + ".tar.gz"
+	if latest != want {
+		t.Fatalf("latest 资产地址错误: %s", latest)
+	}
 }
 
 func TestPanelRepoOverride(t *testing.T) {

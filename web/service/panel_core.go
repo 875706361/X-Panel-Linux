@@ -59,13 +59,14 @@ func PanelCoreAssetArch() string {
 
 func PanelCoreAssetURL(version string) string {
 	tag := strings.TrimSpace(version)
-	if tag == "" {
-		tag = "latest"
-	} else if !strings.HasPrefix(tag, "v") {
+	asset := fmt.Sprintf("x-ui-linux-%s.tar.gz", PanelCoreAssetArch())
+	if tag == "" || strings.EqualFold(tag, "latest") {
+		return fmt.Sprintf("https://github.com/%s/releases/latest/download/%s", PanelRepo(), asset)
+	}
+	if !strings.HasPrefix(tag, "v") {
 		tag = "v" + tag
 	}
-	return fmt.Sprintf("https://github.com/%s/releases/download/%s/x-ui-linux-%s.tar.gz",
-		PanelRepo(), tag, PanelCoreAssetArch())
+	return fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", PanelRepo(), tag, asset)
 }
 
 // PanelReleasesURL 面板内"内核版本"列表的来源，同样只查本仓库。
