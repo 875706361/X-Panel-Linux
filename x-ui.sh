@@ -6,6 +6,9 @@ blue='\033[0;34m'
 yellow='\033[0;33m'
 plain='\033[0m'
 
+# 面板/内核/脚本的唯一来源仓库，可用环境变量覆盖（fork 场景）
+PANEL_REPO="${XUI_PANEL_REPO:-875706361/X-Panel-Linux}"
+
 #Add some basic function here
 function LOGD() {
     echo -e "${yellow}[DEG] $* ${plain}"
@@ -38,7 +41,7 @@ echo -e "——————————————————————"
 echo -e "当前服务器的操作系统为:${red} $release${plain}"
 echo ""
 xui_version=$(/usr/local/x-ui/x-ui -v)
-last_version=$(curl -Ls "https://api.github.com/repos/875706361/X-Panel-Linux/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+last_version=$(curl -Ls "https://api.github.com/repos/${PANEL_REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 echo -e "${green}当前代理面板的版本为: ${red}〔X-Panel面板〕v${xui_version}${plain}"
 echo ""
 echo -e "${yellow}〔X-Panel面板〕最新版为---------->>> ${last_version}${plain}"
@@ -143,11 +146,11 @@ before_show_menu() {
 }
 
 install() {
-    local install_url="https://api.github.com/repos/875706361/X-Panel-Linux/contents/install.sh"
+    local install_url="https://api.github.com/repos/${PANEL_REPO}/contents/install.sh"
     if [[ -n "$GITHUB_TOKEN" ]]; then
         bash <(curl -Ls -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.raw" "${install_url}")
     else
-        bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh)
+        bash <(curl -Ls https://raw.githubusercontent.com/${PANEL_REPO}/main/install.sh)
     fi
     if [[ $? == 0 ]]; then
         if [[ $# == 0 ]]; then
@@ -167,11 +170,11 @@ update() {
         fi
         return 0
     fi
-    local install_url="https://api.github.com/repos/875706361/X-Panel-Linux/contents/install.sh"
+    local install_url="https://api.github.com/repos/${PANEL_REPO}/contents/install.sh"
     if [[ -n "$GITHUB_TOKEN" ]]; then
         bash <(curl -Ls -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.raw" "${install_url}")
     else
-        bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh)
+        bash <(curl -Ls https://raw.githubusercontent.com/${PANEL_REPO}/main/install.sh)
     fi
     if [[ $? == 0 ]]; then
         LOGI "更新完成，面板已自动重启"
@@ -189,11 +192,11 @@ update_menu() {
         fi
         return 0
     fi
-    local shell_url="https://api.github.com/repos/875706361/X-Panel-Linux/contents/x-ui.sh"
+    local shell_url="https://api.github.com/repos/${PANEL_REPO}/contents/x-ui.sh"
     if [[ -n "$GITHUB_TOKEN" ]]; then
         curl -Ls -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.raw" "${shell_url}" -o /usr/bin/x-ui
     else
-        wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/x-ui.sh
+        wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/${PANEL_REPO}/main/x-ui.sh
     fi
     chmod +x /usr/local/x-ui/x-ui.sh
     chmod +x /usr/bin/x-ui
@@ -216,7 +219,7 @@ custom_version() {
         exit 1
     fi
 
-    download_link="https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh"
+    download_link="https://raw.githubusercontent.com/${PANEL_REPO}/main/install.sh"
 
     # Use the entered panel version in the download link
     install_command="bash <(curl -Ls $download_link) v$panel_version"
@@ -250,7 +253,7 @@ uninstall() {
     echo ""
     echo -e "卸载成功\n"
     echo "如果您需要再次安装此面板，可以使用以下命令:"
-    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh)${plain}"
+    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/${PANEL_REPO}/main/install.sh)${plain}"
     echo ""
     # Trap the SIGTERM signal
     trap delete_script SIGTERM
@@ -540,11 +543,11 @@ enable_bbr() {
 }
 
 update_shell() {
-    local shell_url="https://api.github.com/repos/875706361/X-Panel-Linux/contents/x-ui.sh"
+    local shell_url="https://api.github.com/repos/${PANEL_REPO}/contents/x-ui.sh"
     if [[ -n "$GITHUB_TOKEN" ]]; then
         curl -Ls -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.raw" "${shell_url}" -o /usr/bin/x-ui
     else
-        wget -O /usr/bin/x-ui -N --no-check-certificate https://github.com/875706361/X-Panel-Linux/raw/main/x-ui.sh
+        wget -O /usr/bin/x-ui -N --no-check-certificate https://github.com/${PANEL_REPO}/raw/main/x-ui.sh
     fi
     if [[ $? != 0 ]]; then
         echo ""
@@ -1595,7 +1598,7 @@ fi
 
 # --------- 安装/部署sublink服务 ----------
 
-bash <(curl -Ls https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/${PANEL_REPO}/main/install.sh)
 
 
 # --------- 安装 Nginx ----------
@@ -2076,7 +2079,7 @@ show_menu() {
   ${green}25.${plain} 安装订阅转换 
 ——————————————————————
   ${green}〔X-Panel面板〕项目地址${plain}
-  ${yellow}https://github.com/875706361/X-Panel-Linux${plain}
+  ${yellow}https://github.com/${PANEL_REPO}${plain}
 ——————————————————————
 "
     show_status

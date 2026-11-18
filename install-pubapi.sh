@@ -9,7 +9,7 @@ if [ -z "$GITHUB_TOKEN" ]; then
     exit 1
 fi
 
-REPO="875706361/X-Panel-Linux"
+REPO="${XUI_PANEL_REPO:-875706361/X-Panel-Linux}"
 BRANCH="main"
 INSTALL_DIR="/usr/local/x-ui"
 BIN="$INSTALL_DIR/x-ui"

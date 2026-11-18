@@ -1,13 +1,12 @@
 package service
 
 import (
-	"archive/zip"
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -18,7 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"context"
 
 	"x-ui/config"
 	"x-ui/database"
@@ -91,7 +89,8 @@ type Status struct {
 }
 
 type Release struct {
-	TagName string `json:"tag_name"`
+	TagName    string `json:"tag_name"`
+	Prerelease bool   `json:"prerelease"`
 }
 
 type ServerService struct {
@@ -336,12 +335,11 @@ func githubApiGet(url string) (*http.Response, error) {
 }
 
 func (s *ServerService) GetXrayVersions() ([]string, error) {
-	const (
-		XrayURL    = "https://api.github.com/repos/XTLS/Xray-core/releases"
-		bufferSize = 8192
-	)
+	const bufferSize = 8192
 
-	resp, err := githubApiGet(XrayURL)
+	// 只列本仓库的 Release：每个版本包里都是带 REALITY 兼容补丁的 Xray，
+	// 不再向 XTLS/Xray-core 官方仓库取版本或下载内核。
+	resp, err := githubApiGet(PanelReleasesURL())
 	if err != nil {
 		return nil, err
 	}
@@ -372,22 +370,24 @@ func (s *ServerService) GetXrayVersions() ([]string, error) {
 
 	var versions []string
 	for _, release := range releases {
-		tagVersion := strings.TrimPrefix(release.TagName, "v")
+		if release.Prerelease {
+			continue
+		}
+		tagVersion := strings.TrimPrefix(strings.TrimSpace(release.TagName), "v")
 		tagParts := strings.Split(tagVersion, ".")
 		if len(tagParts) != 3 {
 			continue
 		}
-
-		major, err1 := strconv.Atoi(tagParts[0])
-		minor, err2 := strconv.Atoi(tagParts[1])
-		patch, err3 := strconv.Atoi(tagParts[2])
-		if err1 != nil || err2 != nil || err3 != nil {
+		if _, err := strconv.Atoi(tagParts[0]); err != nil {
 			continue
 		}
-
-		if major > 26 || (major == 26 && minor > 1) || (major == 26 && minor == 1 && patch >= 31) {
-			versions = append(versions, release.TagName)
+		if _, err := strconv.Atoi(tagParts[1]); err != nil {
+			continue
 		}
+		if _, err := strconv.Atoi(tagParts[2]); err != nil {
+			continue
+		}
+		versions = append(versions, release.TagName)
 	}
 	return versions, nil
 }
@@ -407,124 +407,6 @@ func (s *ServerService) RestartXrayService() error {
 		logger.Error("start xray failed:", err)
 		return err
 	}
-	return nil
-}
-
-func (s *ServerService) downloadXRay(version string) (string, error) {
-	osName := runtime.GOOS
-	arch := runtime.GOARCH
-
-	switch osName {
-	case "darwin":
-		osName = "macos"
-	case "windows":
-		osName = "windows"
-	}
-
-	switch arch {
-	case "amd64":
-		arch = "64"
-	case "arm64":
-		arch = "arm64-v8a"
-	case "armv7":
-		arch = "arm32-v7a"
-	case "armv6":
-		arch = "arm32-v6"
-	case "armv5":
-		arch = "arm32-v5"
-	case "386":
-		arch = "32"
-	case "s390x":
-		arch = "s390x"
-	}
-
-	fileName := fmt.Sprintf("Xray-%s-%s.zip", osName, arch)
-	url := fmt.Sprintf("https://github.com/XTLS/Xray-core/releases/download/%s/%s", version, fileName)
-	resp, err := http.Get(url)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	os.Remove(fileName)
-	file, err := os.Create(fileName)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	_, err = io.Copy(file, resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	return fileName, nil
-}
-
-func (s *ServerService) UpdateXray(version string) error {
-	// 1. Stop xray before doing anything
-	if err := s.StopXrayService(); err != nil {
-		logger.Warning("failed to stop xray before update:", err)
-	}
-
-	// 2. Download the zip
-	zipFileName, err := s.downloadXRay(version)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(zipFileName)
-
-	zipFile, err := os.Open(zipFileName)
-	if err != nil {
-		return err
-	}
-	defer zipFile.Close()
-
-	stat, err := zipFile.Stat()
-	if err != nil {
-		return err
-	}
-	reader, err := zip.NewReader(zipFile, stat.Size())
-	if err != nil {
-		return err
-	}
-
-	// 3. Helper to extract files
-
-	copyZipFile := func(zipName string, fileName string) error {
-		zipFile, err := reader.Open(zipName)
-		if err != nil {
-			return err
-		}
-		defer zipFile.Close()
-		os.MkdirAll(filepath.Dir(fileName), 0755)
-		os.Remove(fileName)
-		file, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR|os.O_TRUNC, fs.ModePerm)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		_, err = io.Copy(file, zipFile)
-		return err
-	}
-
-	// 4. Extract correct binary
-	if runtime.GOOS == "windows" {
-		targetBinary := filepath.Join("bin", "xray-windows-amd64.exe")
-		err = copyZipFile("xray.exe", targetBinary)
-	} else {
-		err = copyZipFile("xray", xray.GetBinaryPath())
-	}
-	if err != nil {
-		return err
-	}
-
-	// 5. Restart xray
-	if err := s.xrayService.RestartXray(true); err != nil {
-		logger.Error("start xray failed:", err)
-		return err
-	}
-
 	return nil
 }
 
@@ -807,145 +689,54 @@ func (s *ServerService) IsValidGeofileName(filename string) bool {
 }
 
 func (s *ServerService) UpdateGeofile(fileName string) error {
-	files := []struct {
-		URL      string
-		FileName string
-	}{
-		{"https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat", "geoip.dat"},
-		{"https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat", "geosite.dat"},
-		{"https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip.dat", "geoip_IR.dat"},
-		{"https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite.dat", "geosite_IR.dat"},
-		{"https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat", "geoip_RU.dat"},
-		{"https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat", "geosite_RU.dat"},
-	}
+	// geo 文件同样只从本仓库 Release 安装包里取，避免运行时访问第三方仓库。
+	files := []string{"geoip.dat", "geosite.dat", "geoip_IR.dat", "geosite_IR.dat", "geoip_RU.dat", "geosite_RU.dat"}
 
-	// Strict allowlist check to avoid writing uncontrolled files
 	if fileName != "" {
-		// Use the centralized validation function
 		if !s.IsValidGeofileName(fileName) {
 			return common.NewErrorf("Invalid geofile name: contains unsafe path characters: %s", fileName)
 		}
-
-		// Ensure the filename matches exactly one from our allowlist
-		isAllowed := false
-		for _, file := range files {
-			if fileName == file.FileName {
-				isAllowed = true
+		allowed := false
+		for _, name := range files {
+			if fileName == name {
+				allowed = true
 				break
 			}
 		}
-		if !isAllowed {
+		if !allowed {
 			return common.NewErrorf("Invalid geofile name: %s not in allowlist", fileName)
 		}
 	}
 
-	downloadFile := func(url, destPath string) error {
-		var req *http.Request
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return common.NewErrorf("Failed to create HTTP request for %s: %v", url, err)
-		}
-
-		var localFileModTime time.Time
-		if fileInfo, err := os.Stat(destPath); err == nil {
-			localFileModTime = fileInfo.ModTime()
-			if !localFileModTime.IsZero() {
-				req.Header.Set("If-Modified-Since", localFileModTime.UTC().Format(http.TimeFormat))
-			}
-		}
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			return common.NewErrorf("Failed to download Geofile from %s: %v", url, err)
-		}
-		defer resp.Body.Close()
-
-		// Parse Last-Modified header from server
-		var serverModTime time.Time
-		serverModTimeStr := resp.Header.Get("Last-Modified")
-		if serverModTimeStr != "" {
-			parsedTime, err := time.Parse(http.TimeFormat, serverModTimeStr)
-			if err != nil {
-				logger.Warningf("Failed to parse Last-Modified header for %s: %v", url, err)
-			} else {
-				serverModTime = parsedTime
-			}
-		}
-
-		// Function to update local file's modification time
-		updateFileModTime := func() {
-			if !serverModTime.IsZero() {
-				if err := os.Chtimes(destPath, serverModTime, serverModTime); err != nil {
-					logger.Warningf("Failed to update modification time for %s: %v", destPath, err)
-				}
-			}
-		}
-
-		// Handle 304 Not Modified
-		if resp.StatusCode == http.StatusNotModified {
-			updateFileModTime()
-			return nil
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			return common.NewErrorf("Failed to download Geofile from %s: received status code %d", url, resp.StatusCode)
-		}
-
-		file, err := os.Create(destPath)
-		if err != nil {
-			return common.NewErrorf("Failed to create Geofile %s: %v", destPath, err)
-		}
-		defer file.Close()
-
-		_, err = io.Copy(file, resp.Body)
-		if err != nil {
-			return common.NewErrorf("Failed to save Geofile %s: %v", destPath, err)
-		}
-
-		updateFileModTime()
-		return nil
-	}
-
-	var errorMessages []string
-
-	if fileName == "" {
-		for _, file := range files {
-			// Sanitize the filename from our allowlist as an extra precaution
-			destPath := filepath.Join(config.GetBinFolderPath(), filepath.Base(file.FileName))
-			if err := downloadFile(file.URL, destPath); err != nil {
-				errorMessages = append(errorMessages, fmt.Sprintf("Error downloading Geofile '%s': %v", file.FileName, err))
-			}
-		}
-	} else {
-		destPath := fmt.Sprintf("%s/%s", config.GetBinFolderPath(), fileName)
-
-		var fileURL string
-		for _, file := range files {
-			if file.FileName == fileName {
-				fileURL = file.URL
-				break
-			}
-		}
-
-		if fileURL == "" {
-			errorMessages = append(errorMessages, fmt.Sprintf("File '%s' not found in the list of Geofiles", fileName))
-		}
-
-		if err := downloadFile(fileURL, destPath); err != nil {
-			errorMessages = append(errorMessages, fmt.Sprintf("Error downloading Geofile '%s': %v", fileName, err))
-		}
-	}
-
-	err := s.RestartXrayService()
+	tmpDir, err := os.MkdirTemp("", "xpanel-geo-")
 	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+	pkg := filepath.Join(tmpDir, "panel.tar.gz")
+	if err := downloadPanelPackage("latest", pkg); err != nil {
+		return common.NewErrorf("下载本仓库安装包失败: %v", err)
+	}
+
+	binDir := config.GetBinFolderPath()
+	var errorMessages []string
+	targets := files
+	if fileName != "" {
+		targets = []string{fileName}
+	}
+	for _, name := range targets {
+		dst := filepath.Join(binDir, filepath.Base(name))
+		if err := extractNamedFileFromPanelPackage(pkg, name, dst); err != nil {
+			errorMessages = append(errorMessages, fmt.Sprintf("Error updating Geofile '%s': %v", name, err))
+		}
+	}
+
+	if err := s.RestartXrayService(); err != nil {
 		errorMessages = append(errorMessages, fmt.Sprintf("Updated Geofile '%s' but Failed to start Xray: %v", fileName, err))
 	}
-
 	if len(errorMessages) > 0 {
 		return common.NewErrorf("%s", strings.Join(errorMessages, "\r\n"))
 	}
-
 	return nil
 }
 
@@ -969,7 +760,7 @@ func (s *ServerService) GetNewX25519Cert() (any, error) {
 
 	keyPair := map[string]any{
 		"privateKey": privateKey,
-		"publicKey": publicKey, // 修复：U+00A0 替换为标准空格
+		"publicKey":  publicKey, // 修复：U+00A0 替换为标准空格
 	}
 
 	return keyPair, nil
@@ -1133,20 +924,20 @@ func (s *ServerService) LoadLinkHistory() ([]*database.LinkHistory, error) {
 func (s *ServerService) InstallSubconverter() error {
 	// 〔中文注释〕: 使用一个新的 goroutine 来执行耗时的安装任务，这样 API 可以立即返回
 	go func() {
-        
-        // 【新增功能】：执行端口放行操作
-        var ufwWarning string
-        if ufwErr := s.openSubconverterPorts(); ufwErr != nil {
-            // 不中断流程，只生成警告消息
-            logger.Warningf("自动放行 Subconverter 端口失败: %v", ufwErr)
-            ufwWarning = fmt.Sprintf("⚠️ **警告：订阅转换端口放行失败**\n\n自动执行 UFW 命令失败，请务必**手动**在您的 VPS 上放行端口 `8000` 和 `15268`，否则服务将无法访问。失败详情：%v\n\n", ufwErr)
-        }
+
+		// 【新增功能】：执行端口放行操作
+		var ufwWarning string
+		if ufwErr := s.openSubconverterPorts(); ufwErr != nil {
+			// 不中断流程，只生成警告消息
+			logger.Warningf("自动放行 Subconverter 端口失败: %v", ufwErr)
+			ufwWarning = fmt.Sprintf("⚠️ **警告：订阅转换端口放行失败**\n\n自动执行 UFW 命令失败，请务必**手动**在您的 VPS 上放行端口 `8000` 和 `15268`，否则服务将无法访问。失败详情：%v\n\n", ufwErr)
+		}
 
 		// 〔中文注释〕: 检查全局的 TgBot 实例是否存在并且正在运行
 		if s.tgService == nil || !s.tgService.IsRunning() {
 			logger.Warning("TgBot 未运行，无法发送【订阅转换】状态通知。")
 			// 即使机器人未运行，安装流程也应继续，只是不发通知
-            ufwWarning = "" // 如果机器人不在线，不发送任何警告/消息
+			ufwWarning = "" // 如果机器人不在线，不发送任何警告/消息
 		}
 
 		// 脚本路径为 /usr/bin/x-ui
@@ -1181,11 +972,11 @@ func (s *ServerService) InstallSubconverter() error {
 			logger.Errorf("订阅转换安装失败: %v\n输出: %s", err, string(output))
 			return
 		} else {
-            
-            // 【新增逻辑】：如果之前端口放行失败，先发送警告消息
-            if ufwWarning != "" {
-                s.tgService.SendMessage(ufwWarning)
-            }
+
+			// 【新增逻辑】：如果之前端口放行失败，先发送警告消息
+			if ufwWarning != "" {
+				s.tgService.SendMessage(ufwWarning)
+			}
 
 			// 安装成功后，发送通知到 TG 机器人
 			if s.tgService != nil && s.tgService.IsRunning() {
@@ -1277,22 +1068,21 @@ func (s *ServerService) openSubconverterPorts() error {
     exit 0
 	`
 
-    // 使用 /bin/bash -c 执行命令，并捕获输出
+	// 使用 /bin/bash -c 执行命令，并捕获输出
 	cmd := exec.CommandContext(context.Background(), "/bin/bash", "-c", shellCommand)
 	output, err := cmd.CombinedOutput()
 	logOutput := string(output)
-	
+
 	// 记录日志，无论成功与否
 	logger.Infof("执行 Subconverter 端口放行命令结果:\n%s", logOutput)
 
 	if err != nil {
-        // 如果 Shell 命令返回非零退出码，则返回错误
+		// 如果 Shell 命令返回非零退出码，则返回错误
 		return fmt.Errorf("ufw 端口放行失败: %v. 脚本输出: %s", err, logOutput)
 	}
 
 	return nil
 }
-
 
 // 【新增方法实现】: 后台前端开放指定端口
 // OpenPort 供前端调用，自动检查/安装 ufw 并放行指定的端口。
@@ -1394,7 +1184,7 @@ func (s *ServerService) RestartPanel() error {
 		logger.Error(errMsg)
 		return fmt.Errorf(errMsg)
 	}
-	
+
 	// 〔中文注释〕: 定义要执行的命令和参数。
 	cmd := exec.Command(scriptPath, "restart")
 

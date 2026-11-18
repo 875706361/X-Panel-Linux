@@ -11,6 +11,9 @@ blue='\033[0;34m'
 yellow='\033[0;33m'
 plain='\033[0m'
 
+# 面板/内核/脚本的唯一来源仓库，可用环境变量覆盖（fork 场景）
+PANEL_REPO="${XUI_PANEL_REPO:-875706361/X-Panel-Linux}"
+
 # check root
 [[ $EUID -ne 0 ]] && echo -e "${red}致命错误: ${plain} 请使用 root 权限运行此脚本\n" && exit 1
 
@@ -186,7 +189,7 @@ install_free_version() {
 
         # Download resources
         if [ $# == 0 ]; then
-            release_json=$(api_req "https://api.github.com/repos/875706361/X-Panel-Linux/releases/latest")
+            release_json=$(api_req "https://api.github.com/repos/${PANEL_REPO}/releases/latest")
             last_version=$(echo "$release_json" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
             
             if [[ ! -n "$last_version" ]]; then
@@ -200,7 +203,7 @@ install_free_version() {
         else
             last_version=$1
             # For specific tag, get that release
-            release_json=$(api_req "https://api.github.com/repos/875706361/X-Panel-Linux/releases/tags/${last_version}")
+            release_json=$(api_req "https://api.github.com/repos/${PANEL_REPO}/releases/tags/${last_version}")
             if [[ $(echo "$release_json" | grep "Not Found") ]]; then
                  echo -e "${red}未找到版本 $1${plain}"
                  exit 1
@@ -236,7 +239,7 @@ install_free_version() {
         # Download Asset
         if [[ -n "$GITHUB_TOKEN" ]]; then
             curl -L -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
-                 "https://api.github.com/repos/875706361/X-Panel-Linux/releases/assets/$asset_id" \
+                 "https://api.github.com/repos/${PANEL_REPO}/releases/assets/$asset_id" \
                  -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
         else
             # Try public asset browser_download_url first
@@ -245,7 +248,7 @@ install_free_version() {
                 curl -L "$dl_url" -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
             else
                 curl -L -H "Accept: application/octet-stream" \
-                     "https://api.github.com/repos/875706361/X-Panel-Linux/releases/assets/$asset_id" \
+                     "https://api.github.com/repos/${PANEL_REPO}/releases/assets/$asset_id" \
                      -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
             fi
         fi
@@ -258,12 +261,12 @@ install_free_version() {
         # Download x-ui.sh script (using Raw content API)
         if [[ -n "$GITHUB_TOKEN" ]]; then
             api_req -H "Accept: application/vnd.github.v3.raw" \
-                "https://api.github.com/repos/875706361/X-Panel-Linux/contents/x-ui.sh" \
+                "https://api.github.com/repos/${PANEL_REPO}/contents/x-ui.sh" \
                 -o /usr/bin/x-ui-temp
         else
-            curl -Ls "https://raw.githubusercontent.com/875706361/X-Panel-Linux/main/x-ui.sh" -o /usr/bin/x-ui-temp || \
+            curl -Ls "https://raw.githubusercontent.com/${PANEL_REPO}/main/x-ui.sh" -o /usr/bin/x-ui-temp || \
             api_req -H "Accept: application/vnd.github.v3.raw" \
-                "https://api.github.com/repos/875706361/X-Panel-Linux/contents/x-ui.sh" \
+                "https://api.github.com/repos/${PANEL_REPO}/contents/x-ui.sh" \
                 -o /usr/bin/x-ui-temp
         fi
 
@@ -403,7 +406,7 @@ install_free_version() {
     echo ""
     echo -e "----------------------------------------------"
     echo ""
-    echo -e "${green}〔X-Panel面板〕项目地址：${yellow}https://github.com/875706361/X-Panel-Linux${plain}" 
+    echo -e "${green}〔X-Panel面板〕项目地址：${yellow}https://github.com/${PANEL_REPO}${plain}" 
     echo ""
     echo -e "----------------------------------------------"
     echo ""

@@ -17,29 +17,29 @@ echo "========================================"
 download_deps() {
     local platform=$1
     local target_dir=$2
-    local xray_file=""
-    
+    local repo="${XUI_PANEL_REPO:-875706361/X-Panel-Linux}"
+    local tmp
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' RETURN
+
     mkdir -p "$target_dir/bin"
-    
-    case $platform in
-        amd64)  xray_file="Xray-linux-64.zip" ;;
-        arm64)  xray_file="Xray-linux-arm64-v8a.zip" ;;
-        386)    xray_file="Xray-linux-32.zip" ;;
-        armv7)  xray_file="Xray-linux-arm32-v7a.zip" ;;
-        armv6)  xray_file="Xray-linux-arm32-v6.zip" ;;
-        armv5)  xray_file="Xray-linux-arm32-v5.zip" ;;
-        s390x)  xray_file="Xray-linux-s390x.zip" ;;
-    esac
 
-    local local_zip="/tmp/$xray_file"
-    [ ! -f "$local_zip" ] && wget -q "https://github.com/XTLS/Xray-core/releases/download/$XRAY_VER/$xray_file" -O "$local_zip"
-    
-    unzip -q -o "$local_zip" -d "$target_dir/bin"
-    mv "$target_dir/bin/xray" "$target_dir/bin/xray-linux-$platform" 2>/dev/null || true
-    chmod +x "$target_dir/bin/xray-linux-$platform"
+    # 内核与 geo 数据只从本仓库 Release 取，不再访问 XTLS/Xray-core 官方仓库。
+    local pkg="https://github.com/$repo/releases/latest/download/x-ui-linux-$platform.tar.gz"
+    echo "下载本仓库内核包: $pkg"
+    curl -fL --retry 3 -o "$tmp/panel.tar.gz" "$pkg"
+    tar -xzf "$tmp/panel.tar.gz" -C "$tmp"
 
-    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat -O "$target_dir/bin/geoip.dat"
-    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat -O "$target_dir/bin/geosite.dat"
+    local src="$tmp/x-ui/bin"
+    local core
+    core="$(find "$src" -maxdepth 1 -type f -name 'xray-linux-*' | head -n1)"
+    [ -n "$core" ] || { echo "安装包缺少内核" >&2; exit 1; }
+    install -m 0755 "$core" "$target_dir/bin/xray-linux-$platform"
+
+    local f
+    for f in geoip.dat geosite.dat geoip_IR.dat geosite_IR.dat geoip_RU.dat geosite_RU.dat; do
+        [ -f "$src/$f" ] && install -m 0644 "$src/$f" "$target_dir/bin/$f"
+    done
 }
 
 build_linux() {

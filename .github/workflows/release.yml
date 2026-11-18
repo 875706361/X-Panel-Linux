@@ -45,6 +45,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Guard panel sources (own repo only)
+        run: bash scripts/check_panel_sources.sh
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:

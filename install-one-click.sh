@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO="875706361/X-Panel-Linux"
+REPO="${XUI_PANEL_REPO:-875706361/X-Panel-Linux}"
 INSTALL_DIR="/usr/local/x-ui"
 SERVICE="/etc/systemd/system/x-ui.service"
 TMP="$(mktemp -d)"
