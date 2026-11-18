@@ -56,6 +56,24 @@ func TestExtractCoreRejectsPackageWithoutCore(t *testing.T) {
 	}
 }
 
+func TestGetXrayVersionsListsOwnReleases(t *testing.T) {
+	if os.Getenv("XUI_TEST_NETWORK") == "" {
+		t.Skip("XUI_TEST_NETWORK 未设置")
+	}
+	versions, err := (&ServerService{}).GetXrayVersions()
+	if err != nil {
+		t.Fatalf("获取版本失败: %v", err)
+	}
+	if len(versions) == 0 {
+		t.Fatal("版本列表为空")
+	}
+	for _, v := range versions {
+		if !strings.HasPrefix(v, "v26.10.") {
+			t.Fatalf("版本列表混入了非本仓库版本: %s", v)
+		}
+	}
+}
+
 // 集成测试：设 XUI_TEST_PANEL_PKG 为真实 Release 包路径，验证能取出带 -dirty 的补丁内核。
 func TestExtractPatchedCoreFromRealPackage(t *testing.T) {
 	pkg := os.Getenv("XUI_TEST_PANEL_PKG")

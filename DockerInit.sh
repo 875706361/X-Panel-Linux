@@ -38,7 +38,11 @@ trap 'rm -rf "$TMP"' EXIT
 
 URL="https://github.com/${REPO}/releases/latest/download/x-ui-linux-${ASSET}.tar.gz"
 echo "从本仓库下载内核: $URL"
-curl -fL --retry 3 -o "$TMP/panel.tar.gz" "$URL"
+if command -v curl >/dev/null 2>&1; then
+    curl -fL --retry 3 -o "$TMP/panel.tar.gz" "$URL"
+else
+    wget -O "$TMP/panel.tar.gz" "$URL"
+fi
 tar -xzf "$TMP/panel.tar.gz" -C "$TMP"
 
 SRC="$TMP/x-ui/bin"
