@@ -2043,8 +2043,11 @@ func (s *InboundService) GetPubClientView(id string) (map[string]any, bool) {
 			}
 			cl := clients[j]
 			ib := inbounds[i]
-			// 面板通常在「入站」层设到期/流量限额（此服 44/45 个入站有 expiry_time，
-			// 客户端层全 0），客户端层为 0 时回落到入站层，否则 App 端只会显示「不限」。
+			traffic, _ := s.GetClientTrafficByEmail(cl.Email)
+			// 到期/流量可能落在三处: 客户端设置、入站、client_traffics 统计行。
+			// 面板实际以「入站层」为主(客户端层常全 0), 部分写入路径(机器人/旧版 UI)只更新
+			// client_traffics, 所以按 客户端 -> 入站 -> 统计表 依次回落; 全 0 才是真的不限,
+			// 否则 App 端只会显示「长期有效」。
 			exp, total := cl.ExpiryTime, cl.TotalGB
 			if exp == 0 {
 				exp = ib.ExpiryTime
@@ -2052,15 +2055,35 @@ func (s *InboundService) GetPubClientView(id string) (map[string]any, bool) {
 			if total == 0 {
 				total = ib.Total
 			}
-			view := map[string]any{
-				"up":         int64(0),
-				"down":       int64(0),
-				"total":      total,
-				"expiryTime": exp,
-				"enable":     cl.Enable,
-				"email":      cl.Email,
+			if traffic != nil {
+				if exp == 0 && traffic.ExpiryTime != 0 {
+					exp = traffic.ExpiryTime
+				}
+				if total == 0 && traffic.Total != 0 {
+					total = traffic.Total
+				}
 			}
-			if traffic, _ := s.GetClientTrafficByEmail(cl.Email); traffic != nil {
+			// 负值 = 「首次连接后 N 天」的时长(尚未激活)。直接透传时 App 按 >0 判断会
+			// 当成长期有效, 这里换算成绝对时间并给出标记, 客户端可显示「未激活」。
+			expiryPending := false
+			if exp < 0 {
+				expiryPending = true
+				exp = time.Now().UnixMilli() - exp
+			}
+			// 统一成毫秒: 个别面板把到期写成秒(10 位), 客户端各有各的判断, 服务端收敛掉。
+			if exp > 0 && exp < 1e11 {
+				exp *= 1000
+			}
+			view := map[string]any{
+				"up":            int64(0),
+				"down":          int64(0),
+				"total":         total,
+				"expiryTime":    exp,
+				"expiryPending": expiryPending,
+				"enable":        cl.Enable,
+				"email":         cl.Email,
+			}
+			if traffic != nil {
 				view["up"], view["down"] = traffic.Up, traffic.Down
 			}
 			return view, true
