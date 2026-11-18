@@ -9,7 +9,7 @@ cd "$ROOT"
 # 检查对象：安装脚本、面板源码、构建脚本（不含测试与 CI 里的工具链下载）
 mapfile -t files < <(git ls-files '*.sh' '*.go' | grep -Ev '(^|/)(vendor|web/assets)/|_test\.go$')
 
-pattern='github\.com/(XTLS/Xray-core/releases/download|xeefei|mhsanaei)|raw\.githubusercontent\.com/(xeefei|mhsanaei)'
+pattern='github\.com/(XTLS/Xray-core/releases/download|xeefei|mhsanaei|Loyalsoldier/v2ray-rules-dat|chocolate4u/Iran-v2ray-rules|vuong2023/vn-v2ray-rules|runetfreedom/russia-v2ray-rules-dat)|raw\.githubusercontent\.com/(xeefei|mhsanaei)'
 if hits=$(grep -nE "$pattern" "${files[@]}" 2>/dev/null); then
     echo "发现指向官方仓库的下载地址（必须改为本仓库 Release）：" >&2
     echo "$hits" >&2

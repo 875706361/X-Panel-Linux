@@ -774,17 +774,39 @@ update_geo() {
         mkdir -p ${binFolder}
     fi
 
+    # geo 数据只从本仓库 Release 安装包里取，不再访问第三方规则仓库
+    local asset_arch
+    case "$(uname -m)" in
+        x86_64|amd64) asset_arch=amd64 ;;
+        aarch64|arm64) asset_arch=arm64 ;;
+        armv7l|armv7) asset_arch=armv7 ;;
+        armv6l|armv6) asset_arch=armv6 ;;
+        armv5l|armv5) asset_arch=armv5 ;;
+        i386|i686) asset_arch=386 ;;
+        s390x) asset_arch=s390x ;;
+        *) LOGE "不支持的架构: $(uname -m)"; return 1 ;;
+    esac
+
     systemctl stop x-ui
-    cd ${binFolder}
-    rm -f geoip.dat geosite.dat geoip_IR.dat geosite_IR.dat geoip_VN.dat geosite_VN.dat
-    wget -N https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat
-    wget -N https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat
-    wget -O geoip_IR.dat -N https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geoip.dat
-    wget -O geosite_IR.dat -N https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download/geosite.dat
-    wget -O geoip_VN.dat https://github.com/vuong2023/vn-v2ray-rules/releases/latest/download/geoip.dat
-    wget -O geosite_VN.dat https://github.com/vuong2023/vn-v2ray-rules/releases/latest/download/geosite.dat
+    local tmp
+    tmp="$(mktemp -d)"
+    local url="https://github.com/${PANEL_REPO}/releases/latest/download/x-ui-linux-${asset_arch}.tar.gz"
+    LOGI "下载本仓库安装包: ${url}"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fL --retry 3 -o "${tmp}/panel.tar.gz" "${url}"
+    else
+        wget -O "${tmp}/panel.tar.gz" "${url}"
+    fi
+    tar -xzf "${tmp}/panel.tar.gz" -C "${tmp}"
+
+    local src="${tmp}/x-ui/bin"
+    local f
+    for f in geoip.dat geosite.dat geoip_IR.dat geosite_IR.dat geoip_RU.dat geosite_RU.dat; do
+        [ -f "${src}/${f}" ] && cp -f "${src}/${f}" "${binFolder}/${f}"
+    done
+    rm -rf "${tmp}"
     systemctl start x-ui
-    echo -e "${green}Geosite.dat + Geoip.dat + geoip_IR.dat + geosite_IR.dat 在 bin 文件夹: '${binfolder}' 中已经更新成功 !${plain}"
+    echo -e "${green}geoip/geosite 已从本仓库 ${PANEL_REPO} 更新到: '${binFolder}'${plain}"
     before_show_menu
 }
 
