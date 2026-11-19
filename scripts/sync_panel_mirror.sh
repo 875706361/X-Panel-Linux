@@ -30,6 +30,21 @@ if [[ -z "$TAG" ]]; then
 fi
 [[ -n "$TAG" ]] || fail "无法获取 Release tag"
 
+# 同版本且文件齐全时直接跳过，避免每 6 小时重复下载 ~100MB
+if [[ "${FORCE:-0}" != "1" && -f "$DIR/latest.json" ]]; then
+    cur_tag=$(sed -n 's/.*"tag"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$DIR/latest.json" | head -1)
+    if [[ "$cur_tag" == "$TAG" ]]; then
+        all_ok=1
+        for f in "x-ui-linux-$HOST_ARCH.tar.gz" XPanel.exe install.sh x-ui.sh; do
+            [[ -s "$DIR/$f" ]] || all_ok=0
+        done
+        if [[ $all_ok == 1 ]]; then
+            echo "镜像已是 $TAG，跳过下载"
+            exit 0
+        fi
+    fi
+fi
+
 if [[ "$ALL" == "--all" ]]; then
     ARCHES=(amd64 arm64 armv7 armv6 armv5 386 s390x)
 else

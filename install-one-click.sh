@@ -75,6 +75,16 @@ systemctl enable --now x-ui
 sleep 2
 systemctl is-active --quiet x-ui || { systemctl status x-ui --no-pager; fail "x-ui 启动失败"; }
 
+# 自动维护：每 6 小时同步镜像并自动升级面板/客户端
+if [[ -f "$INSTALL_DIR/autoupdate.sh" ]]; then
+  chmod +x "$INSTALL_DIR/autoupdate.sh" "$INSTALL_DIR/sync_panel_mirror.sh" 2>/dev/null || true
+  [[ -f "$INSTALL_DIR/xpanel-autoupdate.service" ]] && cp -f "$INSTALL_DIR/xpanel-autoupdate.service" /etc/systemd/system/
+  [[ -f "$INSTALL_DIR/xpanel-autoupdate.timer" ]] && cp -f "$INSTALL_DIR/xpanel-autoupdate.timer" /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now xpanel-autoupdate.timer >/dev/null 2>&1 || true
+  nohup "$INSTALL_DIR/autoupdate.sh" >>/var/log/xpanel-autoupdate.log 2>&1 &
+fi
+
 port="$($INSTALL_DIR/x-ui setting -show true 2>/dev/null | grep -Eo 'port（端口号）: [0-9]+' | awk '{print $2}' | head -n1 || true)"
 port="${port:-2053}"
 echo "安装完成：x-ui 已运行，端口 ${port}。"

@@ -1,0 +1,11 @@
+[Unit]
+Description=X-Panel auto maintenance (mirror sync + panel/client update)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/x-ui/autoupdate.sh
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=30min

@@ -89,7 +89,10 @@ jobs:
           cp x-ui.service x-ui/
           cp x-ui.sh x-ui/
           cp scripts/sync_panel_mirror.sh x-ui/
-          chmod +x x-ui/sync_panel_mirror.sh
+          cp scripts/xpanel_autoupdate.sh x-ui/autoupdate.sh
+          cp scripts/xpanel-autoupdate.service x-ui/
+          cp scripts/xpanel-autoupdate.timer x-ui/
+          chmod +x x-ui/sync_panel_mirror.sh x-ui/autoupdate.sh
           mv x-ui/xui-release x-ui/x-ui
           mkdir x-ui/bin
           cd x-ui/bin

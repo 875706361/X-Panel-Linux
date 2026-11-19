@@ -390,10 +390,16 @@ install_free_version() {
         systemctl enable x-ui
         systemctl start x-ui
 
-        # 首次安装时后台播种一份本地镜像，后续装同架构面板可直接走本机域名
-        if [ -x /usr/local/x-ui/sync_panel_mirror.sh ] && ! ls /root/xpanel-mirror/x-ui-linux-*.tar.gz >/dev/null 2>&1; then
-            echo -e "${green}正在后台同步安装包到本机镜像（/root/xpanel-mirror）...${plain}"
-            nohup bash /usr/local/x-ui/sync_panel_mirror.sh >/var/log/xpanel-mirror.log 2>&1 &
+        # 自动维护：镜像同步 + 面板/客户端自动升级（systemd timer，每 6 小时）
+        if [ -f /usr/local/x-ui/autoupdate.sh ]; then
+            chmod +x /usr/local/x-ui/autoupdate.sh /usr/local/x-ui/sync_panel_mirror.sh 2>/dev/null || true
+            [ -f /usr/local/x-ui/xpanel-autoupdate.service ] && cp -f /usr/local/x-ui/xpanel-autoupdate.service /etc/systemd/system/
+            [ -f /usr/local/x-ui/xpanel-autoupdate.timer ] && cp -f /usr/local/x-ui/xpanel-autoupdate.timer /etc/systemd/system/
+            systemctl daemon-reload
+            systemctl enable --now xpanel-autoupdate.timer >/dev/null 2>&1 || true
+            echo -e "${green}已启用自动维护定时器（每 6 小时同步镜像/检查更新）${plain}"
+            # 首次立即跑一次，播种镜像并放置客户端
+            nohup /usr/local/x-ui/autoupdate.sh >>/var/log/xpanel-autoupdate.log 2>&1 &
         fi
 
         systemctl stop warp-go >/dev/null 2>&1
