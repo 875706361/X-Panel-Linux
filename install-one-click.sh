@@ -10,8 +10,6 @@ trap 'rm -rf "$TMP"' EXIT
 
 fail() { echo "安装失败：$*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || fail "请使用 root 运行：sudo bash install-one-click.sh"
-command -v curl >/dev/null || fail "缺少 curl，请先安装 curl"
-command -v tar >/dev/null || fail "缺少 tar，请先安装 tar"
 command -v systemctl >/dev/null || fail "需要 systemd"
 
 . /etc/os-release
@@ -35,12 +33,16 @@ esac
 
 if command -v apt-get >/dev/null; then
   apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates tar gzip unzip tzdata
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates tar gzip unzip tzdata python3
 elif command -v dnf >/dev/null; then
-  dnf install -y -q curl ca-certificates tar gzip unzip tzdata
+  dnf install -y -q curl ca-certificates tar gzip unzip tzdata python3
 elif command -v yum >/dev/null; then
-  yum install -y -q curl ca-certificates tar gzip unzip tzdata
+  yum install -y -q curl ca-certificates tar gzip unzip tzdata python3
 fi
+
+command -v curl >/dev/null || fail "缺少 curl，安装依赖失败"
+command -v tar >/dev/null || fail "缺少 tar，安装依赖失败"
+command -v python3 >/dev/null || fail "缺少 python3，安装依赖失败"
 
 asset="x-ui-linux-${asset_arch}.tar.gz"
 mirror_base="${MIRROR%/}"
