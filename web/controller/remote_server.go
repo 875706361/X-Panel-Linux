@@ -43,12 +43,12 @@ func (a *RemoteServerController) getServers(c *gin.Context) {
 		jsonMsg(c, "获取服务器列表失败", err)
 		return
 	}
-	
+
 	// 隐藏密码
 	for _, server := range servers {
 		server.Password = "******"
 	}
-	
+
 	jsonObj(c, servers, nil)
 }
 
@@ -59,9 +59,9 @@ func (a *RemoteServerController) getStats(c *gin.Context) {
 		jsonMsg(c, "获取统计信息失败", err)
 		return
 	}
-	
+
 	maxLimit := a.remoteServerService.GetMaxLimit()
-	
+
 	jsonObj(c, map[string]interface{}{
 		"normalCount":  normalCount,
 		"transitCount": transitCount,
@@ -72,19 +72,19 @@ func (a *RemoteServerController) getStats(c *gin.Context) {
 // addServer 添加服务器
 func (a *RemoteServerController) addServer(c *gin.Context) {
 	var server model.RemoteServer
-	
+
 	if err := c.ShouldBind(&server); err != nil {
 		jsonMsg(c, "参数解析失败", err)
 		return
 	}
-	
+
 	err := a.remoteServerService.AddServer(&server)
 	if err != nil {
 		logger.Warning("添加服务器失败:", err)
 		jsonMsg(c, err.Error(), err)
 		return
 	}
-	
+
 	logger.Info("成功添加远程服务器:", server.Name)
 	jsonMsg(c, "添加成功", nil)
 }
@@ -97,14 +97,14 @@ func (a *RemoteServerController) deleteServer(c *gin.Context) {
 		jsonMsg(c, "无效的服务器ID", err)
 		return
 	}
-	
+
 	err = a.remoteServerService.DeleteServer(id)
 	if err != nil {
 		logger.Warning("删除服务器失败:", err)
 		jsonMsg(c, "删除失败", err)
 		return
 	}
-	
+
 	logger.Info("成功删除远程服务器, ID:", id)
 	jsonMsg(c, "删除成功", nil)
 }
@@ -117,13 +117,13 @@ func (a *RemoteServerController) getLastLink(c *gin.Context) {
 		jsonMsg(c, "无效的服务器ID", err)
 		return
 	}
-	
+
 	link, err := a.remoteServerService.GetLastLink(id)
 	if err != nil {
 		jsonMsg(c, err.Error(), err)
 		return
 	}
-	
+
 	jsonObj(c, link, nil)
 }
 
@@ -135,14 +135,14 @@ func (a *RemoteServerController) setupRelay(c *gin.Context) {
 		jsonMsg(c, "无效的服务器ID", err)
 		return
 	}
-	
+
 	link, err := a.remoteServerService.SetupRelay(id)
 	if err != nil {
 		logger.Warning("部署中转节点失败:", err)
 		jsonMsg(c, err.Error(), err)
 		return
 	}
-	
+
 	jsonObj(c, link, nil)
 }
 
@@ -154,14 +154,14 @@ func (a *RemoteServerController) pingServer(c *gin.Context) {
 		jsonMsg(c, "无效的服务器ID", err)
 		return
 	}
-	
+
 	// 获取服务器信息以进行Ping测试
 	server, err := a.remoteServerService.GetServerByID(id)
 	if err != nil {
 		jsonMsg(c, "获取服务器信息失败", err)
 		return
 	}
-	
+
 	if server.LastLink == "" {
 		jsonObj(c, map[string]interface{}{
 			"result": -1,
@@ -169,7 +169,7 @@ func (a *RemoteServerController) pingServer(c *gin.Context) {
 		}, nil)
 		return
 	}
-	
+
 	// 使用简单的TCP Ping
 	latency, err := a.remoteServerService.PingServer(id)
 	if err != nil {
@@ -179,7 +179,7 @@ func (a *RemoteServerController) pingServer(c *gin.Context) {
 		}, nil)
 		return
 	}
-	
+
 	jsonObj(c, map[string]interface{}{
 		"result": latency,
 		"msg":    "连接正常",

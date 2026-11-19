@@ -8,6 +8,7 @@ plain='\033[0m'
 
 # 面板/内核/脚本的唯一来源仓库，可用环境变量覆盖（fork 场景）
 PANEL_REPO="${XUI_PANEL_REPO:-875706361/X-Panel-Linux}"
+PANEL_MIRROR="${XUI_PANEL_MIRROR:-https://888888666.xyz:1111/clay}"
 
 #Add some basic function here
 function LOGD() {
@@ -146,8 +147,11 @@ before_show_menu() {
 }
 
 install() {
-    local install_url="https://api.github.com/repos/${PANEL_REPO}/contents/install.sh"
-    if [[ -n "$GITHUB_TOKEN" ]]; then
+    local mirror_base="${PANEL_MIRROR%/}"
+    if [[ -n "$mirror_base" ]] && curl -fsIL -m 8 "${mirror_base}/download/pkg/install.sh" >/dev/null 2>&1; then
+        bash <(curl -fsSL "${mirror_base}/download/pkg/install.sh")
+    elif [[ -n "$GITHUB_TOKEN" ]]; then
+        local install_url="https://api.github.com/repos/${PANEL_REPO}/contents/install.sh"
         bash <(curl -Ls -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.raw" "${install_url}")
     else
         bash <(curl -Ls https://raw.githubusercontent.com/${PANEL_REPO}/main/install.sh)
@@ -192,8 +196,11 @@ update_menu() {
         fi
         return 0
     fi
-    local shell_url="https://api.github.com/repos/${PANEL_REPO}/contents/x-ui.sh"
-    if [[ -n "$GITHUB_TOKEN" ]]; then
+    local mirror_base="${PANEL_MIRROR%/}"
+    if [[ -n "$mirror_base" ]] && curl -fsIL -m 8 "${mirror_base}/download/pkg/x-ui.sh" >/dev/null 2>&1; then
+        curl -fsSL "${mirror_base}/download/pkg/x-ui.sh" -o /usr/bin/x-ui
+    elif [[ -n "$GITHUB_$GITHUB_TOKENEN" ]]; then
+        local shell_url="https://api.github.com/repos/${PANEL_REPO}/contents/x-ui.sh"
         curl -Ls -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.raw" "${shell_url}" -o /usr/bin/x-ui
     else
         wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/${PANEL_REPO}/main/x-ui.sh
@@ -543,11 +550,14 @@ enable_bbr() {
 }
 
 update_shell() {
-    local shell_url="https://api.github.com/repos/${PANEL_REPO}/contents/x-ui.sh"
-    if [[ -n "$GITHUB_TOKEN" ]]; then
+    local mirror_base="${PANEL_MIRROR%/}"
+    if [[ -n "$mirror_base" ]] && curl -fsIL -m 8 "${mirror_base}/download/pkg/x-ui.sh" >/dev/null 2>&1; then
+        curl -fsSL "${mirror_base}/download/pkg/x-ui.sh" -o /usr/bin/x-ui
+    elif [[ -n "$GITHUB_$GITHUB_TOKENEN" ]]; then
+        local shell_url="https://api.github.com/repos/${PANEL_REPO}/contents/x-ui.sh"
         curl -Ls -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github.v3.raw" "${shell_url}" -o /usr/bin/x-ui
     else
-        wget -O /usr/bin/x-ui -N --no-check-certificate https://github.com/${PANEL_REPO}/raw/main/x-ui.sh
+        wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/${PANEL_REPO}/main/x-ui.sh
     fi
     if [[ $? != 0 ]]; then
         echo ""

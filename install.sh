@@ -13,6 +13,8 @@ plain='\033[0m'
 
 # 面板/内核/脚本的唯一来源仓库，可用环境变量覆盖（fork 场景）
 PANEL_REPO="${XUI_PANEL_REPO:-875706361/X-Panel-Linux}"
+# 安装包镜像：优先从面板 VPS 域名下载，解析变化不影响；置空则只用 GitHub
+PANEL_MIRROR="${XUI_PANEL_MIRROR:-https://888888666.xyz:1111/clay}"
 
 # check root
 [[ $EUID -ne 0 ]] && echo -e "${red}致命错误: ${plain} 请使用 root 权限运行此脚本\n" && exit 1
@@ -187,14 +189,39 @@ install_free_version() {
             fi
         }
 
+        # 架构 → Release 资产名（x86_64 必须映射成 amd64）
+        case "$(uname -m)" in
+            x86_64|amd64) target_arch=amd64 ;;
+            aarch64|arm64) target_arch=arm64 ;;
+            armv7l|armv7) target_arch=armv7 ;;
+            armv6l|armv6) target_arch=armv6 ;;
+            armv5l|armv5) target_arch=armv5 ;;
+            i386|i686) target_arch=386 ;;
+            s390x) target_arch=s390x ;;
+            *) echo -e "${red}不支持的架构: $(uname -m)${plain}"; exit 1 ;;
+        esac
+        target_file="x-ui-linux-${target_arch}.tar.gz"
+        pkg_path="/usr/local/x-ui-linux-${target_arch}.tar.gz"
+        mirror_base="${PANEL_MIRROR%/}"
+
+        # 优先用面板 VPS 的本地镜像（域名访问，换解析不受影响）
+        use_mirror=0
+        if [[ -n "$mirror_base" ]] && curl -fsIL -m 10 "${mirror_base}/download/pkg/${target_file}" >/dev/null 2>&1; then
+            use_mirror=1
+        fi
+
         # Download resources
         if [ $# == 0 ]; then
-            release_json=$(api_req "https://api.github.com/repos/${PANEL_REPO}/releases/latest")
-            last_version=$(echo "$release_json" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-            
-            if [[ ! -n "$last_version" ]]; then
-                echo -e "${red}获取 X-Panel 版本失败，请检查 GITHUB_TOKEN 是否有效${plain}"
-                exit 1
+            if [[ $use_mirror == 1 ]]; then
+                last_version=$(curl -fsSL -m 10 "${mirror_base}/download/pkg/latest.json" | sed -n 's/.*"tag"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+                last_version=${last_version:-mirror}
+            else
+                release_json=$(api_req "https://api.github.com/repos/${PANEL_REPO}/releases/latest")
+                last_version=$(echo "$release_json" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+                if [[ ! -n "$last_version" ]]; then
+                    echo -e "${red}获取 X-Panel 版本失败，请检查 GITHUB_TOKEN 是否有效${plain}"
+                    exit 1
+                fi
             fi
             echo ""
             echo -e "-----------------------------------------------------"
@@ -202,11 +229,13 @@ install_free_version() {
             echo -e "-----------------------------------------------------"
         else
             last_version=$1
-            # For specific tag, get that release
-            release_json=$(api_req "https://api.github.com/repos/${PANEL_REPO}/releases/tags/${last_version}")
-            if [[ $(echo "$release_json" | grep "Not Found") ]]; then
-                 echo -e "${red}未找到版本 $1${plain}"
-                 exit 1
+            if [[ $use_mirror != 1 ]]; then
+                # For specific tag, get that release
+                release_json=$(api_req "https://api.github.com/repos/${PANEL_REPO}/releases/tags/${last_version}")
+                if [[ $(echo "$release_json" | grep "Not Found") ]]; then
+                    echo -e "${red}未找到版本 $1${plain}"
+                    exit 1
+                fi
             fi
             echo ""
             echo -e "--------------------------------------------"
@@ -216,44 +245,48 @@ install_free_version() {
 
         sleep 2
         echo -e "${green}---------------->>>>>>>>>安装进度50%${plain}"
-        
-        # Parse Asset ID for current architecture
-        target_arch=$(arch)
-        target_file="x-ui-linux-${target_arch}.tar.gz"
-        
-        asset_id=""
-        if command -v python3 &>/dev/null; then
-             asset_id=$(echo "$release_json" | python3 -c "import sys, json; data = json.load(sys.stdin); print(next((a['id'] for a in data.get('assets', []) if a['name'] == '${target_file}'), ''))")
-        else
-             echo -e "${yellow}警告: 未检测到 python3，使用文本匹配模式解析资源 ID${plain}"
-             asset_id=$(echo "$release_json" | grep -C 10 "${target_file}" | grep '"id":' | head -n 1 | awk '{print $2}' | tr -d ',')
-        fi
-        
-        if [[ ! -n "$asset_id" ]]; then
-            echo -e "${red}无法找到架构 ${target_arch} 的下载资源 (Asset ID Not Found)${plain}"
-            exit 1
-        fi
 
-        echo -e "${green}---------------->>>>>>>>>>>>>>>>>>>>>下载资源 ID: ${asset_id}${plain}"
-        
-        # Download Asset
-        if [[ -n "$GITHUB_TOKEN" ]]; then
-            curl -L -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
-                 "https://api.github.com/repos/${PANEL_REPO}/releases/assets/$asset_id" \
-                 -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
-        else
-            # Try public asset browser_download_url first
-            dl_url=$(echo "$release_json" | python3 -c "import sys, json; data = json.load(sys.stdin); print(next((a.get('browser_download_url','') for a in data.get('assets', []) if a.get('name') == '${target_file}'), ''))" 2>/dev/null || true)
-            if [[ -n "$dl_url" ]]; then
-                curl -L "$dl_url" -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
-            else
-                curl -L -H "Accept: application/octet-stream" \
-                     "https://api.github.com/repos/${PANEL_REPO}/releases/assets/$asset_id" \
-                     -o "/usr/local/x-ui-linux-${target_arch}.tar.gz"
+        if [[ $use_mirror == 1 ]]; then
+            echo -e "${green}从面板镜像下载: ${mirror_base}/download/pkg/${target_file}${plain}"
+            if ! curl -fL -m 600 "${mirror_base}/download/pkg/${target_file}" -o "$pkg_path"; then
+                echo -e "${yellow}镜像下载失败，回退 GitHub${plain}"
+                use_mirror=0
             fi
         fi
 
-        if [[ $? -ne 0 ]]; then
+        if [[ $use_mirror != 1 ]]; then
+            asset_id=""
+            if command -v python3 &>/dev/null; then
+                asset_id=$(echo "$release_json" | python3 -c "import sys, json; data = json.load(sys.stdin); print(next((a['id'] for a in data.get('assets', []) if a['name'] == '${target_file}'), ''))")
+            else
+                echo -e "${yellow}警告: 未检测到 python3，使用文本匹配模式解析资源 ID${plain}"
+                asset_id=$(echo "$release_json" | grep -C 10 "${target_file}" | grep '"id":' | head -n 1 | awk '{print $2}' | tr -d ',')
+            fi
+
+            if [[ ! -n "$asset_id" ]]; then
+                echo -e "${red}无法找到架构 ${target_arch} 的下载资源 (Asset ID Not Found)${plain}"
+                exit 1
+            fi
+
+            echo -e "${green}---------------->>>>>>>>>>>>>>>>>>>>>下载资源 ID: ${asset_id}${plain}"
+
+            if [[ -n "$GITHUB_TOKEN" ]]; then
+                curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
+                     "https://api.github.com/repos/${PANEL_REPO}/releases/assets/$asset_id" \
+                     -o "$pkg_path"
+            else
+                dl_url=$(echo "$release_json" | python3 -c "import sys, json; data = json.load(sys.stdin); print(next((a.get('browser_download_url','') for a in data.get('assets', []) if a.get('name') == '${target_file}'), ''))" 2>/dev/null || true)
+                if [[ -n "$dl_url" ]]; then
+                    curl -L "$dl_url" -o "$pkg_path"
+                else
+                    curl -L -H "Accept: application/octet-stream" \
+                         "https://api.github.com/repos/${PANEL_REPO}/releases/assets/$asset_id" \
+                         -o "$pkg_path"
+                fi
+            fi
+        fi
+
+        if [[ ! -s "$pkg_path" ]]; then
             echo -e "${red}下载 X-Panel 失败${plain}"
             exit 1
         fi
@@ -279,19 +312,19 @@ install_free_version() {
         sleep 3
         echo -e "${green}------->>>>>>>>>>>检查并保存安装目录${plain}"
         echo ""
-        tar zxvf x-ui-linux-$(arch).tar.gz
-        rm x-ui-linux-$(arch).tar.gz -f
+        tar zxvf x-ui-linux-${target_arch}.tar.gz
+        rm x-ui-linux-${target_arch}.tar.gz -f
         
         cd x-ui
         chmod +x x-ui
         chmod +x x-ui.sh
 
         # Check the system's architecture and rename the file accordingly
-        if [[ $(arch) == "armv5" || $(arch) == "armv6" || $(arch) == "armv7" ]]; then
-            mv bin/xray-linux-$(arch) bin/xray-linux-arm
+        if [[ ${target_arch} == "armv5" || ${target_arch} == "armv6" || ${target_arch} == "armv7" ]]; then
+            mv bin/xray-linux-${target_arch} bin/xray-linux-arm
             chmod +x bin/xray-linux-arm
         fi
-        chmod +x x-ui bin/xray-linux-$(arch)
+        chmod +x x-ui bin/xray-linux-${target_arch}
 
         # Update x-ui cli and se set permission
         mv -f /usr/bin/x-ui-temp /usr/bin/x-ui
@@ -332,23 +365,37 @@ install_free_version() {
         show_access_info
 
         # 放置修复版 Windows 客户端（面板「下载 Windows 客户端」按此路径读取）
-        mkdir -p /root/win-client-csharp
-        CLIENT_URL=$(echo "$release_json" | python3 -c "import sys, json; data = json.load(sys.stdin); print(next((a.get('browser_download_url','') for a in data.get('assets', []) if a.get('name') == 'XPanel.exe'), ''))" 2>/dev/null || true)
-        if [[ -n "$CLIENT_URL" ]]; then
-            curl -sL "$CLIENT_URL" -o /root/win-client-csharp/XPanel.exe && \
-            chmod +x /root/win-client-csharp/XPanel.exe && \
-            cp -f /root/win-client-csharp/XPanel.exe /root/XPanel.exe && \
-            cp -f /root/win-client-csharp/XPanel.exe /root/客户端.exe && \
-            echo -e "${green}Windows 客户端已就位（面板内可直接下载）${plain}" || \
-            echo -e "${yellow}Windows 客户端下载失败，可手动放置到 /root/win-client-csharp/XPanel.exe${plain}"
+        mkdir -p /root/win-client-csharp /root/xpanel-mirror
+        client_ok=0
+        if [[ -n "$mirror_base" ]] && curl -fsIL -m 8 "${mirror_base}/download/pkg/XPanel.exe" >/dev/null 2>&1; then
+            curl -fsL -m 300 "${mirror_base}/download/pkg/XPanel.exe" -o /root/win-client-csharp/XPanel.exe && client_ok=1
+        fi
+        if [[ $client_ok != 1 && -n "$release_json" ]]; then
+            CLIENT_URL=$(echo "$release_json" | python3 -c "import sys, json; data = json.load(sys.stdin); print(next((a.get('browser_download_url','') for a in data.get('assets', []) if a.get('name') == 'XPanel.exe'), ''))" 2>/dev/null || true)
+            if [[ -n "$CLIENT_URL" ]]; then
+                curl -sL "$CLIENT_URL" -o /root/win-client-csharp/XPanel.exe && client_ok=1
+            fi
+        fi
+        if [[ $client_ok == 1 ]]; then
+            chmod +x /root/win-client-csharp/XPanel.exe
+            cp -f /root/win-client-csharp/XPanel.exe /root/XPanel.exe
+            cp -f /root/win-client-csharp/XPanel.exe /root/客户端.exe
+            echo -e "${green}Windows 客户端已就位（面板内可直接下载）${plain}"
         else
-            echo -e "${yellow}Release 中未找到 XPanel.exe 资源，跳过客户端部署${plain}"
+            echo -e "${yellow}未取到 XPanel.exe（镜像和 Release 都没有），跳过客户端部署${plain}"
         fi
 
         cp -f x-ui.service /etc/systemd/system/
         systemctl daemon-reload
         systemctl enable x-ui
         systemctl start x-ui
+
+        # 首次安装时后台播种一份本地镜像，后续装同架构面板可直接走本机域名
+        if [ -x /usr/local/x-ui/sync_panel_mirror.sh ] && ! ls /root/xpanel-mirror/x-ui-linux-*.tar.gz >/dev/null 2>&1; then
+            echo -e "${green}正在后台同步安装包到本机镜像（/root/xpanel-mirror）...${plain}"
+            nohup bash /usr/local/x-ui/sync_panel_mirror.sh >/var/log/xpanel-mirror.log 2>&1 &
+        fi
+
         systemctl stop warp-go >/dev/null 2>&1
         wg-quick down wgcf >/dev/null 2>&1
         systemctl start warp-go >/dev/null 2>&1

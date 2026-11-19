@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 REPO="${XUI_PANEL_REPO:-875706361/X-Panel-Linux}"
+MIRROR="${XUI_PANEL_MIRROR:-https://888888666.xyz:1111/clay}"
 INSTALL_DIR="/usr/local/x-ui"
 SERVICE="/etc/systemd/system/x-ui.service"
 TMP="$(mktemp -d)"
@@ -41,14 +42,20 @@ elif command -v yum >/dev/null; then
   yum install -y -q curl ca-certificates tar gzip unzip tzdata
 fi
 
-api="https://api.github.com/repos/${REPO}/releases/latest"
-json="$(curl --fail --silent --show-error --location --retry 3 "$api")" || fail "读取 GitHub Release 失败。当前仓库没有 Release 时不能安装。"
 asset="x-ui-linux-${asset_arch}.tar.gz"
-url="$(printf '%s' "$json" | python3 -c 'import json,sys; d=json.load(sys.stdin); n=sys.argv[1]; print(next((a["browser_download_url"] for a in d.get("assets",[]) if a.get("name")==n),""))' "$asset" 2>/dev/null || true)"
-[[ -n "$url" ]] || fail "最新 Release 缺少资源：$asset"
-
+mirror_base="${MIRROR%/}"
 echo "下载 X-Panel ${asset} ..."
-curl --fail --silent --show-error --location --retry 3 "$url" -o "$TMP/package.tar.gz"
+if [[ -n "$mirror_base" ]] && curl -fsIL -m 10 "${mirror_base}/download/pkg/${asset}" >/dev/null 2>&1; then
+  echo "使用面板镜像: ${mirror_base}/download/pkg/${asset}"
+  curl --fail --silent --show-error --location --retry 3 "${mirror_base}/download/pkg/${asset}" -o "$TMP/package.tar.gz" \
+    || fail "镜像下载失败"
+else
+  api="https://api.github.com/repos/${REPO}/releases/latest"
+  json="$(curl --fail --silent --show-error --location --retry 3 "$api")" || fail "读取 GitHub Release 失败。当前仓库没有 Release 时不能安装。"
+  url="$(printf '%s' "$json" | python3 -c 'import json,sys; d=json.load(sys.stdin); n=sys.argv[1]; print(next((a["browser_download_url"] for a in d.get("assets",[]) if a.get("name")==n),""))' "$asset" 2>/dev/null || true)"
+  [[ -n "$url" ]] || fail "最新 Release 缺少资源：$asset"
+  curl --fail --silent --show-error --location --retry 3 "$url" -o "$TMP/package.tar.gz"
+fi
 tar -tzf "$TMP/package.tar.gz" >/dev/null || fail "安装包校验失败"
 
 systemctl stop x-ui 2>/dev/null || true

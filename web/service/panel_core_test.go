@@ -79,6 +79,29 @@ func TestGetXrayVersionsListsOwnReleases(t *testing.T) {
 	}
 }
 
+func TestLocalPanelPackageMatch(t *testing.T) {
+	dir := t.TempDir()
+	arch := PanelCoreAssetArch()
+	name := "x-ui-linux-" + arch + ".tar.gz"
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("pkg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "latest.json"), []byte(`{"tag":"v26.10.41"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XUI_PKG_MIRROR_DIR", dir)
+
+	if p, ok := localPanelPackage(""); !ok || filepath.Base(p) != name {
+		t.Fatalf("latest 未命中本地镜像: %v %v", p, ok)
+	}
+	if p, ok := localPanelPackage("26.10.41"); !ok || filepath.Base(p) != name {
+		t.Fatalf("同版本未命中本地镜像: %v %v", p, ok)
+	}
+	if _, ok := localPanelPackage("26.10.39"); ok {
+		t.Fatal("不同版本不应使用本地镜像")
+	}
+}
+
 // 集成测试：设 XUI_TEST_PANEL_PKG 为真实 Release 包路径，验证能取出带 -dirty 的补丁内核。
 func TestExtractPatchedCoreFromRealPackage(t *testing.T) {
 	pkg := os.Getenv("XUI_TEST_PANEL_PKG")

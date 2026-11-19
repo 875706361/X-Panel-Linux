@@ -39,6 +39,8 @@ func (a *IndexController) initRouter(g *gin.RouterGroup) {
 	g.GET("/download/xpanel-v2.apk", a.downloadApk)
 	g.GET("/download/xpanel.exe", a.downloadWindowsClient) // 公开一键下载 Windows 客户端
 	g.GET("/download/windows.exe", a.downloadWindowsClient)
+	g.GET("/download/pkg/:name", a.downloadPkgMirror) // VPS 本地镜像（安装包/客户端）
+	g.HEAD("/download/pkg/:name", a.downloadPkgMirror)
 	g.POST("/login", a.login)
 	g.GET("/logout", a.logout)
 	g.POST("/getTwoFactorEnable", a.getTwoFactorEnable)
@@ -127,4 +129,8 @@ func (a *IndexController) downloadApk(c *gin.Context) {
 
 func (a *IndexController) downloadWindowsClient(c *gin.Context) {
 	serveWindowsClient(c)
+}
+
+func (a *IndexController) downloadPkgMirror(c *gin.Context) {
+	servePkgMirror(c)
 }

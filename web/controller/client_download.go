@@ -13,6 +13,7 @@ var windowsClientPaths = []string{
 	"/root/win-client-csharp/XPanel.exe",
 	"/root/客户端.exe",
 	"/root/XPanel.exe",
+	"/root/xpanel-mirror/XPanel.exe",
 	"web/assets/xpanel-windows.exe",
 	"/usr/local/x-ui/web/assets/xpanel-windows.exe",
 	"/root/win-client-csharp/客户端.exe",

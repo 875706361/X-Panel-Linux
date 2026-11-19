@@ -3,6 +3,7 @@ package service
 import (
 	"archive/tar"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -74,8 +75,51 @@ func PanelReleasesURL() string {
 	return fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=30", PanelRepo())
 }
 
+// localPanelPackage 返回本地镜像里的安装包路径；只认与请求版本匹配的 latest.json。
+func localPanelPackage(version string) (string, bool) {
+	dir := strings.TrimSpace(os.Getenv("XUI_PKG_MIRROR_DIR"))
+	if dir == "" {
+		dir = "/root/xpanel-mirror"
+	}
+	pkg := filepath.Join(dir, fmt.Sprintf("x-ui-linux-%s.tar.gz", PanelCoreAssetArch()))
+	if st, err := os.Stat(pkg); err != nil || st.IsDir() {
+		return "", false
+	}
+	v := strings.TrimSpace(version)
+	if v == "" || strings.EqualFold(v, "latest") {
+		return pkg, true
+	}
+	var meta struct {
+		Tag string `json:"tag"`
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "latest.json"))
+	if err != nil || json.Unmarshal(raw, &meta) != nil || meta.Tag == "" {
+		return "", false
+	}
+	if strings.TrimPrefix(meta.Tag, "v") == strings.TrimPrefix(v, "v") {
+		return pkg, true
+	}
+	return "", false
+}
+
 // downloadPanelPackage 下载本仓库的 Release 包到指定文件。
+// 优先使用 VPS 本地镜像（/root/xpanel-mirror），没有命中再回源 GitHub。
 func downloadPanelPackage(version, dst string) error {
+	if local, ok := localPanelPackage(version); ok {
+		in, err := os.Open(local)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		out, err := os.Create(dst)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		_, err = io.Copy(out, in)
+		return err
+	}
+
 	url := PanelCoreAssetURL(version)
 	client := &http.Client{Timeout: 10 * time.Minute}
 	resp, err := client.Get(url)
