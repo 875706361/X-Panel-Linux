@@ -14,7 +14,7 @@ import (
 // 面板公开提供下载，国内用户不必直连 GitHub。
 const defaultPkgMirrorDir = "/root/xpanel-mirror"
 
-var pkgMirrorAllow = regexp.MustCompile(`^(x-ui-linux-(amd64|arm64|armv7|armv6|armv5|386|s390x)\.tar\.gz|XPanel\.exe|latest\.json|install\.sh|x-ui\.sh)$`)
+var pkgMirrorAllow = regexp.MustCompile(`^(x-ui-linux-(amd64|arm64|armv7|armv6|armv5|386|s390x)\.tar\.gz|XPanel\.exe|xpanel-client\.apk|latest\.json|client\.json|install\.sh|x-ui\.sh)$`)
 
 func pkgMirrorDir() string {
 	if v := strings.TrimSpace(os.Getenv("XUI_PKG_MIRROR_DIR")); v != "" {

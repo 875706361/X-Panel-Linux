@@ -29,5 +29,17 @@ gh release view "$TAG" --repo "$REPO" --json assets \
 [ "$(gh release view "$TAG" --repo "$REPO" --json assets --jq '[.assets[]|select(.name=="XPanel.exe")]|length')" = "1" ] \
   || fail "Release 中没有 XPanel.exe"
 
+# Android APK（可选，存在就一起发）
+APK="${XUI_ANDROID_APK:-/root/xpanel-client.apk}"
+if [ -f "$APK" ]; then
+    echo "安卓客户端: $APK ($(du -h "$APK" | cut -f1))  md5=$(md5sum "$APK" | cut -d' ' -f1)"
+    gh release upload "$TAG" "$APK#xpanel-client.apk" --repo "$REPO" --clobber
+    [ "$(gh release view "$TAG" --repo "$REPO" --json assets --jq '[.assets[]|select(.name=="xpanel-client.apk")]|length')" = "1" ] \
+      || fail "Release 中没有 xpanel-client.apk"
+    echo "已上传: xpanel-client.apk"
+else
+    echo "未找到 $APK，跳过安卓客户端"
+fi
+
 echo "完成。面板更新后下载地址（公开，无需登录）："
 echo "  https://<面板域名或IP>:<端口>/<webBasePath>/download/xpanel.exe"

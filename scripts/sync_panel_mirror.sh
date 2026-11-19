@@ -35,7 +35,7 @@ if [[ "${FORCE:-0}" != "1" && -f "$DIR/latest.json" ]]; then
     cur_tag=$(sed -n 's/.*"tag"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$DIR/latest.json" | head -1)
     if [[ "$cur_tag" == "$TAG" ]]; then
         all_ok=1
-        for f in "x-ui-linux-$HOST_ARCH.tar.gz" XPanel.exe; do
+        for f in "x-ui-linux-$HOST_ARCH.tar.gz" XPanel.exe client.json; do
             [[ -s "$DIR/$f" ]] || all_ok=0
         done
         if [[ $all_ok == 1 ]]; then
@@ -77,6 +77,16 @@ for name in "${assets[@]}"; do
     json_parts+=("  \"$name\": {\"size\": $size, \"sha256\": \"$sha\"}")
 done
 
+# Android APK 可选：发布里有就同步，没有则跳过（不影响 Windows/面板）
+apk_url="https://github.com/$REPO/releases/download/$TAG/xpanel-client.apk"
+if curl -fL --retry 2 -m 300 -o "$tmp/xpanel-client.apk" "$apk_url"; then
+    mv -f "$tmp/xpanel-client.apk" "$DIR/xpanel-client.apk"
+    echo "已同步 xpanel-client.apk"
+else
+    rm -f "$DIR/xpanel-client.apk"
+    echo "Release 无 xpanel-client.apk，跳过安卓客户端"
+fi
+
 {
     echo "{"
     echo "  \"tag\": \"$TAG\","
@@ -88,6 +98,18 @@ done
     echo "}"
 } > "$DIR/latest.json.tmp"
 mv -f "$DIR/latest.json.tmp" "$DIR/latest.json"
+
+# 客户端自动更新清单（按文件哈希比对，客户端无需懂版本号）
+{
+    echo "{"
+    echo "  \"windows\": {\"file\": \"XPanel.exe\", \"size\": $(stat -c %s "$DIR/XPanel.exe"), \"sha256\": \"$(sha256sum "$DIR/XPanel.exe" | cut -d' ' -f1)\"}"
+    if [[ -s "$DIR/xpanel-client.apk" ]]; then
+        echo "  ,"
+        echo "  \"android\": {\"file\": \"xpanel-client.apk\", \"size\": $(stat -c %s "$DIR/xpanel-client.apk"), \"sha256\": \"$(sha256sum "$DIR/xpanel-client.apk" | cut -d' ' -f1)\"}"
+    fi
+    echo "}"
+} > "$DIR/client.json.tmp"
+mv -f "$DIR/client.json.tmp" "$DIR/client.json"
 
 # 安装/管理脚本也放一份到镜像，国内可用面板域名一键安装
 # 从刚下载的安装包里取，避免依赖仓库工作目录
