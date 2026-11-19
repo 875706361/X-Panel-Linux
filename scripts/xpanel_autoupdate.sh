@@ -86,6 +86,14 @@ else
     [[ -f "$tmp/x-ui/x-ui.sh" ]] && install -m 755 "$tmp/x-ui/x-ui.sh" "$INSTALL_DIR/x-ui.sh"
     [[ -f "$tmp/x-ui/sync_panel_mirror.sh" ]] && install -m 755 "$tmp/x-ui/sync_panel_mirror.sh" "$INSTALL_DIR/sync_panel_mirror.sh"
     [[ -f "$tmp/x-ui/autoupdate.sh" ]] && install -m 755 "$tmp/x-ui/autoupdate.sh" "$INSTALL_DIR/autoupdate.sh"
+    if [[ -f "$tmp/x-ui/xpanel-autoupdate.service" ]]; then
+        install -m 644 "$tmp/x-ui/xpanel-autoupdate.service" /etc/systemd/system/
+    fi
+    if [[ -f "$tmp/x-ui/xpanel-autoupdate.timer" ]]; then
+        install -m 644 "$tmp/x-ui/xpanel-autoupdate.timer" /etc/systemd/system/
+    fi
+    systemctl daemon-reload || true
+    systemctl enable --now xpanel-autoupdate.timer >/dev/null 2>&1 || true
     systemctl start "$SERVICE" || true
 
     # 健康检查：服务 active + 面板端口在监听
