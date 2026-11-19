@@ -35,7 +35,7 @@ if [[ "${FORCE:-0}" != "1" && -f "$DIR/latest.json" ]]; then
     cur_tag=$(sed -n 's/.*"tag"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$DIR/latest.json" | head -1)
     if [[ "$cur_tag" == "$TAG" ]]; then
         all_ok=1
-        for f in "x-ui-linux-$HOST_ARCH.tar.gz" XPanel.exe install.sh x-ui.sh; do
+        for f in "x-ui-linux-$HOST_ARCH.tar.gz" XPanel.exe; do
             [[ -s "$DIR/$f" ]] || all_ok=0
         done
         if [[ $all_ok == 1 ]]; then
@@ -90,9 +90,14 @@ done
 mv -f "$DIR/latest.json.tmp" "$DIR/latest.json"
 
 # 安装/管理脚本也放一份到镜像，国内可用面板域名一键安装
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cp -f "$ROOT/install.sh" "$DIR/install.sh"
-cp -f "$ROOT/x-ui.sh" "$DIR/x-ui.sh"
+# 从刚下载的安装包里取，避免依赖仓库工作目录
+pkg="$DIR/x-ui-linux-$HOST_ARCH.tar.gz"
+if [[ -f "$pkg" ]]; then
+    tar -xzf "$pkg" -C "$tmp" x-ui/x-ui.sh 2>/dev/null || true
+    tar -xzf "$pkg" -C "$tmp" x-ui/install.sh 2>/dev/null || true
+    if [[ -f "$tmp/x-ui/x-ui.sh" ]]; then cp -f "$tmp/x-ui/x-ui.sh" "$DIR/x-ui.sh"; fi
+    if [[ -f "$tmp/x-ui/install.sh" ]]; then cp -f "$tmp/x-ui/install.sh" "$DIR/install.sh"; fi
+fi
 
 echo "完成：$DIR"
 ls -lh "$DIR"

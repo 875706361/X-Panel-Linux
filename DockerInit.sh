@@ -55,7 +55,7 @@ install -m 0755 "$CORE" "build/bin/xray-linux-${BIN}"
 
 # geo 数据同样取自本仓库安装包，避免额外访问第三方仓库
 for f in geoip.dat geosite.dat geoip_IR.dat geosite_IR.dat geoip_RU.dat geosite_RU.dat; do
-    [ -f "$SRC/$f" ] && install -m 0644 "$SRC/$f" "build/bin/$f"
+    if [ -f "$SRC/$f" ]; then install -m 0644 "$SRC/$f" "build/bin/$f"; fi
 done
 
 # 校验：补丁版内核横幅必须带 -dirty（宿主架构可直接执行时）

@@ -398,14 +398,14 @@ install_free_version() {
             systemctl daemon-reload
             systemctl enable --now xpanel-autoupdate.timer >/dev/null 2>&1 || true
             echo -e "${green}已启用自动维护定时器（每 6 小时同步镜像/检查更新）${plain}"
-            # 首次立即跑一次，播种镜像并放置客户端
-            nohup /usr/local/x-ui/autoupdate.sh >>/var/log/xpanel-autoupdate.log 2>&1 &
+            # 首次立即跑一次（由 systemd 保证单实例），播种镜像并放置客户端
+            systemctl start --no-block xpanel-autoupdate.service >/dev/null 2>&1 || true
         fi
 
-        systemctl stop warp-go >/dev/null 2>&1
-        wg-quick down wgcf >/dev/null 2>&1
-        systemctl start warp-go >/dev/null 2>&1
-        wg-quick up wgcf >/dev/null 2A>&1
+        systemctl stop warp-go >/dev/null 2>&1 || true
+        command -v wg-quick >/dev/null 2>&1 && wg-quick down wgcf >/dev/null 2>&1 || true
+        systemctl start warp-go >/dev/null 2>&1 || true
+        command -v wg-quick >/dev/null 2>&1 && wg-quick up wgcf >/dev/null 2>&1 || true
 
         echo ""
         echo -e "------->>>>${green}X-Panel 免费基础版 ${last_version}${plain}<<<<安装成功，正在启动..."
@@ -439,7 +439,9 @@ install_free_version() {
     }
 
     # 设置VPS中的时区/时间为【上海时间】
-    sudo timedatectl set-timezone Asia/Shanghai
+    if command -v timedatectl >/dev/null 2>&1; then
+        timedatectl set-timezone Asia/Shanghai >/dev/null 2>&1 || true
+    fi
 
     install_base
     install_x-ui $1

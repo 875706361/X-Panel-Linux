@@ -82,7 +82,7 @@ if [[ -f "$INSTALL_DIR/autoupdate.sh" ]]; then
   [[ -f "$INSTALL_DIR/xpanel-autoupdate.timer" ]] && cp -f "$INSTALL_DIR/xpanel-autoupdate.timer" /etc/systemd/system/
   systemctl daemon-reload
   systemctl enable --now xpanel-autoupdate.timer >/dev/null 2>&1 || true
-  nohup "$INSTALL_DIR/autoupdate.sh" >>/var/log/xpanel-autoupdate.log 2>&1 &
+  systemctl start --no-block xpanel-autoupdate.service >/dev/null 2>&1 || true
 fi
 
 port="$($INSTALL_DIR/x-ui setting -show true 2>/dev/null | grep -Eo 'port（端口号）: [0-9]+' | awk '{print $2}' | head -n1 || true)"

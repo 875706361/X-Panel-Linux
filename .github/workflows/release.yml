@@ -88,6 +88,7 @@ jobs:
           cp xui-release x-ui/
           cp x-ui.service x-ui/
           cp x-ui.sh x-ui/
+          cp install.sh x-ui/
           cp scripts/sync_panel_mirror.sh x-ui/
           cp scripts/xpanel_autoupdate.sh x-ui/autoupdate.sh
           cp scripts/xpanel-autoupdate.service x-ui/
