@@ -37,6 +37,12 @@ fi
 tag_ver="${tag#v}"
 log "当前=$cur 最新=$tag_ver"
 
+# 已知坏版本不再反复尝试，等下一个 Release
+if [[ -f "$MIRROR_DIR/.failed-$tag_ver" ]]; then
+    log "跳过已知失败版本 $tag_ver（等待更新版本）"
+    exit 0
+fi
+
 # 2) 同步镜像（同 tag 时脚本内部会直接跳过）
 if [[ "$DRY_RUN" != "1" && -x "$INSTALL_DIR/sync_panel_mirror.sh" ]]; then
     if ! XUI_PANEL_MIRROR="$MIRROR" XUI_PKG_MIRROR_DIR="$MIRROR_DIR" \
@@ -83,9 +89,9 @@ else
 
     systemctl stop "$SERVICE" || true
     install -m 755 "$tmp/x-ui/x-ui" "$INSTALL_DIR/x-ui"
-    [[ -f "$tmp/x-ui/x-ui.sh" ]] && install -m 755 "$tmp/x-ui/x-ui.sh" "$INSTALL_DIR/x-ui.sh"
-    [[ -f "$tmp/x-ui/sync_panel_mirror.sh" ]] && install -m 755 "$tmp/x-ui/sync_panel_mirror.sh" "$INSTALL_DIR/sync_panel_mirror.sh"
-    [[ -f "$tmp/x-ui/autoupdate.sh" ]] && install -m 755 "$tmp/x-ui/autoupdate.sh" "$INSTALL_DIR/autoupdate.sh"
+    if [[ -f "$tmp/x-ui/x-ui.sh" ]]; then install -m 755 "$tmp/x-ui/x-ui.sh" "$INSTALL_DIR/x-ui.sh"; fi
+    if [[ -f "$tmp/x-ui/sync_panel_mirror.sh" ]]; then install -m 755 "$tmp/x-ui/sync_panel_mirror.sh" "$INSTALL_DIR/sync_panel_mirror.sh"; fi
+    if [[ -f "$tmp/x-ui/autoupdate.sh" ]]; then install -m 755 "$tmp/x-ui/autoupdate.sh" "$INSTALL_DIR/autoupdate.sh"; fi
     if [[ -f "$tmp/x-ui/xpanel-autoupdate.service" ]]; then
         install -m 644 "$tmp/x-ui/xpanel-autoupdate.service" /etc/systemd/system/
     fi
@@ -96,20 +102,32 @@ else
     systemctl enable --now xpanel-autoupdate.timer >/dev/null 2>&1 || true
     systemctl start "$SERVICE" || true
 
-    # 健康检查：服务 active + 面板端口在监听
-    port=$("$INSTALL_DIR/x-ui" setting -show true 2>/dev/null | sed -n 's/.*端口号）: *\([0-9]*\).*/\1/p' | head -1)
+    # 健康检查：服务 active + 面板端口真的能响应（不依赖 ss）
+    raw=$("$INSTALL_DIR/x-ui" setting -show true 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' || true)
+    port=$(echo "$raw" | sed -n 's/.*端口号）: *\([0-9]*\).*/\1/p' | head -1)
+    base=$(echo "$raw" | sed -n 's/.*webBasePath（访问路径）: *\(.*\)/\1/p' | head -1)
+    base=${base%/}
     sleep 6
     ok=0
     if systemctl is-active --quiet "$SERVICE"; then
-        if [[ -z "$port" ]] || ss -ltn 2>/dev/null | grep -q ":$port "; then
+        if [[ -z "$port" ]]; then
             ok=1
+        else
+            code=$(curl -sk -m 5 -o /dev/null -w '%{http_code}' "https://127.0.0.1:${port}${base}/" 2>/dev/null || true)
+            if [[ -z "$code" || "$code" == "000" ]]; then
+                code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}${base}/" 2>/dev/null || true)
+            fi
+            if [[ -n "$code" && "$code" != "000" ]]; then
+                ok=1
+            fi
         fi
     fi
     if [[ $ok != 1 ]]; then
         log "ERROR: 升级后健康检查失败，回滚到 $cur"
+        touch "$MIRROR_DIR/.failed-$tag_ver" 2>/dev/null || true
         systemctl stop "$SERVICE" || true
-        cp -a "$INSTALL_DIR/x-ui.bak.$cur" "$INSTALL_DIR/x-ui"
-        [[ -f "$INSTALL_DIR/x-ui.sh.bak.$cur" ]] && cp -a "$INSTALL_DIR/x-ui.sh.bak.$cur" "$INSTALL_DIR/x-ui.sh"
+        if [[ -f "$INSTALL_DIR/x-ui.bak.$cur" ]]; then cp -a "$INSTALL_DIR/x-ui.bak.$cur" "$INSTALL_DIR/x-ui"; fi
+        if [[ -f "$INSTALL_DIR/x-ui.sh.bak.$cur" ]]; then cp -a "$INSTALL_DIR/x-ui.sh.bak.$cur" "$INSTALL_DIR/x-ui.sh"; fi
         systemctl start "$SERVICE" || true
         fail "已回滚"
     fi
