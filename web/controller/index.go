@@ -14,9 +14,9 @@ import (
 )
 
 type LoginForm struct {
-	Username    	string `json:"username" form:"username"`
-	Password    	string `json:"password" form:"password"`
-	TwoFactorCode	string `json:"twoFactorCode" form:"twoFactorCode"`
+	Username      string `json:"username" form:"username"`
+	Password      string `json:"password" form:"password"`
+	TwoFactorCode string `json:"twoFactorCode" form:"twoFactorCode"`
 }
 
 type IndexController struct {
@@ -37,6 +37,8 @@ func (a *IndexController) initRouter(g *gin.RouterGroup) {
 	g.GET("/", a.index)
 	g.GET("/download/xpanel.apk", a.downloadApk)
 	g.GET("/download/xpanel-v2.apk", a.downloadApk)
+	g.GET("/download/xpanel.exe", a.downloadWindowsClient) // 公开一键下载 Windows 客户端
+	g.GET("/download/windows.exe", a.downloadWindowsClient)
 	g.POST("/login", a.login)
 	g.GET("/logout", a.logout)
 	g.POST("/getTwoFactorEnable", a.getTwoFactorEnable)
@@ -121,4 +123,8 @@ func (a *IndexController) downloadApk(c *gin.Context) {
 	c.Header("Pragma", "no-cache")
 	c.Header("Expires", "0")
 	c.FileAttachment("/root/xpanel-client.apk", "xpanel-client-v2.apk")
+}
+
+func (a *IndexController) downloadWindowsClient(c *gin.Context) {
+	serveWindowsClient(c)
 }

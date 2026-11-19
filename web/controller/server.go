@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"os"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"time"
 
@@ -34,7 +34,7 @@ func NewServerController(g *gin.RouterGroup, serverService service.ServerService
 		lastGetStatusTime: time.Now(),
 		// 〔中文注释〕: 2. 将传入的 serverService 赋值给 a.serverService。
 		//    这样一来，这个 Controller 内部使用的就是我们在 main.go 中创建的那个功能完整的服务了。
-		serverService:  serverService,
+		serverService: serverService,
 	}
 	a.initRouter(g)
 	a.startTask()
@@ -343,19 +343,18 @@ func (a *ServerController) loadHistory(c *gin.Context) {
 	jsonObj(c, history, nil)
 }
 
-
 // 〔新增接口〕: 安装 Subconverter
 // 〔中文注释〕: 这个函数是暴露给前端的 API 接口，用于处理安装 Subconverter 的请求。
 func (a *ServerController) installSubconverter(c *gin.Context) {
-    // 〔中文注释〕: 调用服务层中我们刚刚创建的 InstallSubconverter 方法。
-    err := a.serverService.InstallSubconverter()
-    if err != nil {
-        // 〔中文注释〕: 如果 service 层返回了错误，则向前台返回失败的 JSON 消息。
-        jsonMsg(c, "Subconverter 安装指令执行失败", err)
-        return
-    }
-    // 〔中文注释〕: 如果没有错误，则向前台返回成功的 JSON 消息。
-    jsonMsg(c, "Subconverter 安装指令已成功发送", nil)
+	// 〔中文注释〕: 调用服务层中我们刚刚创建的 InstallSubconverter 方法。
+	err := a.serverService.InstallSubconverter()
+	if err != nil {
+		// 〔中文注释〕: 如果 service 层返回了错误，则向前台返回失败的 JSON 消息。
+		jsonMsg(c, "Subconverter 安装指令执行失败", err)
+		return
+	}
+	// 〔中文注释〕: 如果没有错误，则向前台返回成功的 JSON 消息。
+	jsonMsg(c, "Subconverter 安装指令已成功发送", nil)
 }
 
 // 【新增接口实现】: 前端放行端口
@@ -378,7 +377,6 @@ func (a *ServerController) openPort(c *gin.Context) {
 	jsonMsg(c, "端口放行指令已成功发送，正在后台执行...", nil)
 }
 
-
 func (a *ServerController) buildApp(c *gin.Context) {
 	paths := []string{"/root/xpanel-client.apk", "web/assets/xpanel-client.apk", "/usr/local/x-ui/web/assets/xpanel-client.apk"}
 	for _, p := range paths {
@@ -391,12 +389,5 @@ func (a *ServerController) buildApp(c *gin.Context) {
 }
 
 func (a *ServerController) downloadWindows(c *gin.Context) {
-	paths := []string{"/root/客户端.exe", "/root/XPanel.exe", "web/assets/xpanel-windows.exe", "/usr/local/x-ui/web/assets/xpanel-windows.exe", "/root/win-client-csharp/客户端.exe", "/root/win-client-csharp/XPanel.exe"}
-	for _, p := range paths {
-		if _, err := os.Stat(p); err == nil {
-			c.FileAttachment(p, "客户端.exe")
-			return
-		}
-	}
-	c.String(http.StatusNotFound, "Windows client not found")
+	serveWindowsClient(c)
 }
