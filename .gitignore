@@ -18,8 +18,8 @@ dist/
 release/
 node_modules/
 
-# Ignore compiled binaries
-main
+# Ignore compiled binaries（只忽略根目录的 main，别误伤 */src/main/）
+/main
 
 # Ignore script and executable files
 /release.sh
