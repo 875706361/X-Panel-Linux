@@ -99,10 +99,21 @@ fi
 } > "$DIR/latest.json.tmp"
 mv -f "$DIR/latest.json.tmp" "$DIR/latest.json"
 
-# 客户端自动更新清单（按文件哈希比对，客户端无需懂版本号）
+# 客户端自动更新清单（按文件哈希比对 + 版本号护栏，防止把新版换回旧包）
+CLIENT_VER=""
+if command -v python3 >/dev/null 2>&1 && [[ -s "$DIR/XPanel.exe" ]]; then
+    CLIENT_VER=$(python3 - "$DIR/XPanel.exe" <<'PY'
+import re, sys
+data = open(sys.argv[1], 'rb').read().decode('utf-16le', 'ignore')
+vs = set(re.findall(r'v\d+\.\d+\.\d+', data))
+key = lambda s: [int(x) for x in s[1:].split('.')]
+print(sorted(vs, key=key)[-1] if vs else '')
+PY
+)
+fi
 {
     echo "{"
-    echo "  \"windows\": {\"file\": \"XPanel.exe\", \"size\": $(stat -c %s "$DIR/XPanel.exe"), \"sha256\": \"$(sha256sum "$DIR/XPanel.exe" | cut -d' ' -f1)\"}"
+    echo "  \"windows\": {\"file\": \"XPanel.exe\", \"version\": \"$CLIENT_VER\", \"size\": $(stat -c %s "$DIR/XPanel.exe"), \"sha256\": \"$(sha256sum "$DIR/XPanel.exe" | cut -d' ' -f1)\"}"
     if [[ -s "$DIR/xpanel-client.apk" ]]; then
         echo "  ,"
         echo "  \"android\": {\"file\": \"xpanel-client.apk\", \"size\": $(stat -c %s "$DIR/xpanel-client.apk"), \"sha256\": \"$(sha256sum "$DIR/xpanel-client.apk" | cut -d' ' -f1)\"}"

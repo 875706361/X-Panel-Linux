@@ -68,6 +68,17 @@ internal static class ExpiryTests {
         finally { try { if (l != null) l.Stop(); } catch { } }
     }
 
+    // 自动更新必须只升不降：镜像里还是旧包时，不能把已修好的新版换回去。
+    static void CheckUpdateVersionGuard()
+    {
+        var m = typeof(Updater).GetMethod("CompareVersion", BindingFlags.NonPublic | BindingFlags.Static);
+        Func<string, string, int> cmp = (a, b) => (int)m.Invoke(null, new object[] { a, b });
+        CheckEquals("same version is not newer", cmp("v10.4.3", "10.4.3") == 0 ? "same" : "diff", "same");
+        CheckEquals("older release is rejected", cmp("v10.4.2", "v10.4.3") < 0 ? "older" : "not-older", "older");
+        CheckEquals("newer release is accepted", cmp("v10.5.0", "v10.4.3") > 0 ? "newer" : "not-newer", "newer");
+        CheckEquals("two digit segment compares numerically", cmp("v10.10.0", "v10.9.9") > 0 ? "newer" : "not-newer", "newer");
+    }
+
     public static int Main() {
         // 面板地址探测（节点域名常不等于面板域名，路径也未必在 /clay）
         string[] urls = MainForm.PanelTrafficUrls("node.example.com", "abc", "");
@@ -132,6 +143,7 @@ internal static class ExpiryTests {
             "{\"success\":true,\"obj\":{\"expiryTime\":null}}", "未获取");
 
         CheckHardTimeout();
+        CheckUpdateVersionGuard();
 
         Console.WriteLine("Failures: " + failures);
         return failures == 0 ? 0 : 1;

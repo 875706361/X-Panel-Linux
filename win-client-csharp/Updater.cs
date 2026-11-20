@@ -19,6 +19,7 @@ namespace XPanelWin
         {
             public string file;
             public string sha256;
+            public string version;
             public long size;
         }
 
@@ -44,6 +45,15 @@ namespace XPanelWin
 
             var m = new JavaScriptSerializer().Deserialize<Manifest>(json);
             if (m == null || m.windows == null || string.IsNullOrEmpty(m.windows.sha256)) return;
+
+            // 版本护栏：清单没写版本号（旧镜像）或版本不高于本机时都不换。
+            // 只按 sha 比对会把已修好的新版 exe 换回镜像里的旧包（降级）。
+            if (string.IsNullOrEmpty(m.windows.version))
+            {
+                MainForm.LogToFile("[UPDATE] client.json 无版本号，跳过自动更新");
+                return;
+            }
+            if (CompareVersion(m.windows.version, MainForm.VER) <= 0) return;
 
             string exe = System.Windows.Forms.Application.ExecutablePath;
             string selfSha = Sha256File(exe);
@@ -115,6 +125,27 @@ namespace XPanelWin
             using (var input = resp.GetResponseStream())
             using (var output = File.Create(path))
                 input.CopyTo(output);
+        }
+
+        // 版本比较：v10.4.3 vs 10.10.0，缺失段按 0 处理。返回 -1/0/1。
+        private static int CompareVersion(string a, string b)
+        {
+            int[] x = VerParts(a), y = VerParts(b);
+            for (int i = 0; i < 3; i++)
+            {
+                if (x[i] != y[i]) return x[i] < y[i] ? -1 : 1;
+            }
+            return 0;
+        }
+
+        private static int[] VerParts(string v)
+        {
+            var nums = new int[3];
+            if (string.IsNullOrEmpty(v)) return nums;
+            string[] parts = v.Trim().TrimStart('v', 'V').Split('.');
+            for (int i = 0; i < 3 && i < parts.Length; i++)
+                int.TryParse(parts[i], out nums[i]);
+            return nums;
         }
 
         private static string Sha256File(string path)
