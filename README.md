@@ -920,3 +920,13 @@ XUI_BIN_FOLDER="bin" XUI_DB_FOLDER="/etc/x-ui" go build main.go
 ## Star 趋势
 
 [![Stargazers over time](https://starchart.cc/875706361/X-Panel-Linux.svg)](https://starchart.cc/875706361/X-Panel-Linux)
+
+------------
+## 客户端源码
+
+- **Windows**：`win-client-csharp/` —— 当前分发的 `XPanel.exe`（C# / WinForms，mcs 构建，内嵌 xray/hysteria）
+- **Android**：`android-client/` —— 当前分发的 `xpanel-client.apk`（Java / VpnService，aapt2 手工构建）
+- **Windows 旧 Go 版**：`win-client/`（v7.2，仅存档）
+
+两个客户端都通过面板公开接口 `/panel/pub/traffic/<uuid>` 查流量与到期，
+自动更新走 `/download/pkg/client.json`（sha256 + 版本号护栏，只升不降）。

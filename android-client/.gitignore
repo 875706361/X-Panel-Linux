@@ -1,0 +1,15 @@
+# 构建产物
+build/
+dist/
+*.apk
+*.idsig
+
+# 大块内核文件（见 README「缺失的大文件」）
+src/main/jniLibs/
+src/main/assets/sing-box
+src/main/assets/sing-box.gz
+
+# 签名密钥
+debug.keystore
+*.jks
+*.keystore
