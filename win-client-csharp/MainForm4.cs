@@ -1,0 +1,554 @@
+// 主窗口（第四部分：登录 / 代理开关 / 流量轮询 / 日志）
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.Globalization;
+using System.IO;
+using System.Net;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Win32;
+using System.Web.Script.Serialization;
+using System.Windows.Forms;
+
+namespace XPanelWin
+{
+    internal partial class MainForm
+    {
+        // ---------- 登录 ----------
+
+        private void HandleLogin()
+        {
+            string raw = _edit.Text;
+            LogToFile("[LOGIN] 开始解析 长度=" + raw.Length);
+            NodeInfo n = LinkParser.Parse(raw);
+            if (n == null)
+            {
+                LogToFile("[LOGIN] 解析失败");
+                _lblTip.Text = "链接格式错误，支持 vless:// vmess:// trojan:// ss://";
+                return;
+            }
+            LogToFile("[LOGIN] 解析成功 proto=" + n.proto + " " + n.address + ":" + n.port + " 切页");
+            _node = n;
+            SaveLink(raw);
+            _lblTip.Text = "";
+            SwitchPage(2);
+        }
+
+        // ---------- 重置全部设置 ----------
+        private void HandleReset()
+        {
+            var res = MessageBox.Show("确定要重置全部设置并恢复到初始状态吗？\n将断开连接并清空已保存的节点信息。", "重置确认", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (res != DialogResult.Yes) return;
+
+            try
+            {
+                if (_connected) StopProxy();
+            }
+            catch { }
+
+            // 清理注册表配置
+            try
+            {
+                using (var k = Registry.CurrentUser.OpenSubKey(REG_KEY, true))
+                {
+                    if (k != null)
+                    {
+                        k.DeleteValue("link", false);
+                        k.DeleteValue("bypass_cn", false);
+                    }
+                }
+            }
+            catch { }
+
+            // 恢复内存与界面状态
+            _node = null;
+            _bypassCn = true;
+            ApplyModeStyle();
+            _edit.Text = "";
+            _lblTip.Text = "";
+            _lblStatus.Text = "未连接";
+            _lblStatus.ForeColor = Theme.C(Theme.IDLE);
+            _lblTraffic.Text = "0.00 MB";
+            _lblUp.Text = "0.00 MB";
+            _lblDown.Text = "0.00 MB";
+
+            LogToFile("[RESET] 用户重置全部设置，恢复初始状态");
+            SwitchPage(1);
+        }
+
+        // ---------- 代理开关 ----------
+
+        private void ToggleConnect()
+        {
+            lock (_stateLock)
+            {
+                if (_busy) return;
+                _busy = true;
+            }
+            try
+            {
+                if (_connected) StopProxy();
+                else StartProxy();
+            }
+            finally
+            {
+                lock (_stateLock) _busy = false;
+            }
+        }
+
+        private void StartProxy()
+        {
+            NodeInfo n = LinkParser.Parse(_edit.Text);
+            if (n == null)
+            {
+                SetStatus("链接格式错误", Theme.C(Theme.DANGER));
+                return;
+            }
+            _node = n;
+            SetStatus("正在连接...", Theme.C(Theme.ACCENT));
+
+            try { Xray.EnsureFiles(); }
+            catch (Exception ex)
+            {
+                SetStatus("内核文件缺失", Theme.C(Theme.DANGER));
+                LogToFile("[XRAY] " + ex.Message);
+                return;
+            }
+
+            // hysteria2 走 hysteria.exe，bypassCn 由 BuildHy2Config 内部 ACL 处理
+            Process p;
+            try { p = Xray.Start(n.proto == "hy2" ? Xray.BuildHy2Config(n, _bypassCn) : Xray.BuildConfig(n, _bypassCn), n.proto); }
+            catch (Exception ex)
+            {
+                SetStatus("内核启动失败", Theme.C(Theme.DANGER));
+                LogToFile("[XRAY] " + ex.Message);
+                return;
+            }
+            _xray = p;
+            SetSystemProxy(true, "127.0.0.1:10809");
+            _connected = true;
+            SetConnButton(true);
+            SetStatus("已连接 · " + n.proto.ToUpper() + (n.name.Length > 0 ? " · " + n.name : ""), Theme.C(Theme.SUCCESS));
+            Invalidate();
+        }
+
+        private void StopProxy()
+        {
+            Xray.Stop(_xray);
+            _xray = null;
+            SetSystemProxy(false, "");
+            _connected = false;
+            _lastUp = _lastDown = _speedUp = _speedDown = 0;
+            SetConnButton(false);
+            SetStatus("未连接", Theme.C(Theme.IDLE));
+            Invalidate();
+        }
+
+        private void SetConnButton(bool connected)
+        {
+            if (InvokeRequired) { Invoke(new Action<bool>(SetConnButton), connected); return; }
+            _btnConn.Text = connected ? "断开连接" : "启动加速";
+            // 已连接时"启动加速"变"断开连接"：红底危险态（Go btnStyleFor 同款）
+            if (connected) _btnConn.SetDangerStyle();
+            else ApplyStyle();
+        }
+
+        private void SetStatus(string text, Color clr)
+        {
+            try
+            {
+                if (InvokeRequired)
+                {
+                    if (!IsHandleCreated) return;
+                    BeginInvoke(new Action<string, Color>(SetStatus), text, clr);
+                    return;
+                }
+                _lblStatus.Text = text;
+                _lblStatus.ForeColor = clr;
+            }
+            catch (Exception ex) { LogToFile("[UI] " + ex.Message); }
+        }
+
+        // 系统代理：写注册表 + 通知 Wininet 刷新，让已打开的浏览器立即生效
+        private static void SetSystemProxy(bool enable, string addr)
+        {
+            try
+            {
+                using (var k = Registry.CurrentUser.CreateSubKey(
+                    "Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"))
+                {
+                    if (enable)
+                    {
+                        k.SetValue("ProxyEnable", 1, RegistryValueKind.DWord);
+                        k.SetValue("ProxyServer", addr, RegistryValueKind.String);
+                        k.SetValue("ProxyOverride", "localhost;127.*;10.*;192.168.*;<local>", RegistryValueKind.String);
+                    }
+                    else
+                    {
+                        k.SetValue("ProxyEnable", 0, RegistryValueKind.DWord);
+                    }
+                }
+                Native.InternetSetOption(IntPtr.Zero, 39, IntPtr.Zero, 0); // PROXY_SETTINGS_CHANGED
+                Native.InternetSetOption(IntPtr.Zero, 37, IntPtr.Zero, 0); // REFRESH
+            }
+            catch (Exception ex) { LogToFile("[PROXY] " + ex.Message); }
+        }
+
+        // ---------- 流量轮询 ----------
+
+        private const int POLL_OK_MS = 2000;      // 正常节奏：2 秒一次
+        private const int POLL_FAIL_MS = 8000;    // 查不到时退避，避免超时把轮询拖成"永远在查"
+        private const int POLL_TIMEOUT_MS = 1200; // 单个候选的硬超时（含 DNS/TCP 连接阶段）
+        private const string LOCAL_HTTP_PROXY = "http://127.0.0.1:10809";
+
+        private async Task PollTrafficLoop()
+        {
+            // 面板常用自签证书或直接用 IP 访问，证书必然对不上；校验失败会让所有候选都超时。
+            ServicePointManager.ServerCertificateValidationCallback = (s, cert, chain, errors) => true;
+            while (true)
+            {
+                int wait = POLL_OK_MS;
+                try
+                {
+                    if (_node != null) _serverUuid = _node.uuid;   // 面板流量接口按 uuid 查（仅 vless 面板节点有效）
+                    if (string.IsNullOrEmpty(_serverUuid))
+                    {
+                        await Task.Delay(500);
+                        continue;
+                    }
+
+                    string host = _node != null && !string.IsNullOrEmpty(_node.address) ? _node.address : "";
+                    string baseUrl;
+                    bool panelReachable;
+                    // 已连接时走本地 http 入站（127.0.0.1:10809）：面板端口在国内常被干扰/封锁，
+                    // 直连查不到是常态；走自己刚建立的隧道才稳定。
+                    string body = FetchPanelJson(host, _serverUuid, _panelBase,
+                        url => HttpGet(url, POLL_TIMEOUT_MS, _connected), out baseUrl, out panelReachable);
+                    if (body == null)
+                    {
+                        Color gray = ColorTranslator.FromHtml("#7a7a82");
+                        // 面板通、但这台机器的入站里没有该 uuid（多数是导入的不是本面板节点/协议不支持查询）
+                        SetExpireLabel(panelReachable ? "到期: 节点未登记" : "到期: 查询失败", gray);
+                        wait = POLL_FAIL_MS;
+                    }
+                    else
+                    {
+                        if (!string.Equals(_panelBase, baseUrl, StringComparison.Ordinal))
+                        {
+                            _panelBase = baseUrl;
+                            SavePanelBase(baseUrl);      // 下次启动直接用命中的地址
+                            LogToFile("[POLL] 面板地址命中 " + baseUrl);
+                        }
+
+                        var jss = new JavaScriptSerializer();
+                        var res = jss.Deserialize<TrafficResp>(body);
+                        if (res == null || !res.success || res.obj == null)
+                        {
+                            SetExpireLabel("到期: 节点未登记", ColorTranslator.FromHtml("#7a7a82"));
+                            wait = POLL_FAIL_MS;
+                        }
+                        else
+                        {
+
+                    long up = res.obj.up, down = res.obj.down, total = res.obj.total;
+                    if (_lastUp > 0 || _lastDown > 0)
+                    {
+                        _speedUp = (up - _lastUp) / 2;
+                        _speedDown = (down - _lastDown) / 2;
+                        if (_speedUp < 0) _speedUp = 0;
+                        if (_speedDown < 0) _speedDown = 0;
+                    }
+                    _lastUp = up; _lastDown = down;
+
+                    string tot = total > 0 ? " / " + FmtBytes(total) : "";
+                    SetText(_lblTraffic, FmtBytes(up + down) + tot);
+                    SetText(_lblUp, FmtBytes(up));
+                    SetText(_lblDown, FmtBytes(down));
+                    Color expColor;
+                    string expText = ExpireLine(res.obj.expiryTime, res.obj.expiryPending, out expColor);
+                    SetExpireLabel(expText, expColor);
+                    SetText(_lblSpeed, "↑ " + FmtBytes(_speedUp) + "/s  ↓ " + FmtBytes(_speedDown) +
+                                       "/s · 客户端 " + VER);
+                        }
+                    }
+                }
+                catch (Exception ex) { LogToFile("[POLL] " + ex.Message); wait = POLL_FAIL_MS; }
+                await Task.Delay(wait);
+            }
+        }
+
+        // 面板查询候选地址。节点域名常与面板本身不同（中转 / CDN / 反代），路径也未必挂在 /clay 下，
+        // 所以按「节点→默认面板」逐个试；命中的地址会被后续轮询优先复用（见 _panelBase）。
+        // 顺序即代价：每个候选最多 POLL_TIMEOUT_MS，所以 https 在前、明文 http 垫底。
+        internal static string[] PanelTrafficUrls(string host, string id, string preferredBase)
+        {
+            var list = new List<string>();
+            if (string.IsNullOrEmpty(id)) return list.ToArray();
+            string escapedId = Uri.EscapeDataString(id);
+            Action<string> add = baseUrl =>
+            {
+                string u = baseUrl.TrimEnd('/') + "/panel/pub/traffic/" + escapedId;
+                if (!list.Contains(u)) list.Add(u);
+            };
+            if (!string.IsNullOrEmpty(host))
+            {
+                add("https://" + host + ":1111/clay");
+                add("https://" + host + ":1111");
+                add("https://" + host + "/clay");
+                add("https://" + host);
+                add("http://" + host + ":1111/clay");
+            }
+            add(PANEL_BASE);
+            if (!string.IsNullOrEmpty(preferredBase))   // 上次命中的地址排最前，省掉整轮试探
+            {
+                string prefer = preferredBase.TrimEnd('/') + "/panel/pub/traffic/" + escapedId;
+                int i = list.IndexOf(prefer);
+                if (i > 0) { list.RemoveAt(i); list.Insert(0, prefer); }
+                if (i < 0) list.Insert(0, prefer);
+            }
+            return list.ToArray();
+        }
+
+        // 已连接时走本地 http 入站：面板端口（1111）在国内常被干扰，直连必然查不到到期；
+        // 未连接则直连，避免 IE 里残留的代理设置把请求绕到不存在的通道上。
+        private static IWebProxy PollProxy(bool connected)
+        {
+            return connected ? new WebProxy(LOCAL_HTTP_PROXY, false) : null;
+        }
+
+        // HttpWebRequest.Timeout 管不住 DNS/TCP 连接阶段（SYN 被丢包时能卡几十秒），
+        // 这里用 BeginGetResponse + WaitOne 强制硬超时，超时即 Abort。
+        private static string HttpGet(string url, int timeoutMs, bool viaLocalProxy)
+        {
+            HttpWebRequest req = null;
+            try
+            {
+                req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "GET";
+                req.Timeout = timeoutMs;
+                req.ReadWriteTimeout = timeoutMs;
+                req.KeepAlive = false;
+                req.AllowAutoRedirect = true;
+                req.Proxy = PollProxy(viaLocalProxy);
+                req.ServerCertificateValidationCallback = (s, cert, chain, errors) => true;
+
+                IAsyncResult ar = req.BeginGetResponse(null, null);
+                if (!ar.AsyncWaitHandle.WaitOne(timeoutMs))
+                {
+                    // Abort 本身可能阻塞数百毫秒，扔到线程池，保证一轮探测的耗时可控
+                    HttpWebRequest dead = req;
+                    System.Threading.ThreadPool.QueueUserWorkItem(delegate { try { dead.Abort(); } catch { } });
+                    LogToFile("[POLL] " + url + " -> 超时 " + timeoutMs + "ms");
+                    return null;
+                }
+                using (var resp = req.EndGetResponse(ar))
+                using (var sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                    return sr.ReadToEnd();
+            }
+            catch (Exception ex)
+            {
+                if (req != null) { try { req.Abort(); } catch { } }
+                LogToFile("[POLL] " + url + " -> " + ex.Message);
+                return null;
+            }
+        }
+
+        // 命中过的面板前缀持久化，下次启动直接复用；也允许运维手工写
+        // HKCU\Software\XPanel\panel_base 指定中转/反代地址。
+        private void SavePanelBase(string baseUrl)
+        {
+            try
+            {
+                using (var k = Registry.CurrentUser.CreateSubKey(REG_KEY))
+                    if (k != null) k.SetValue("panel_base", baseUrl);
+            }
+            catch { }
+        }
+
+        private void LoadPanelBase()
+        {
+            try
+            {
+                using (var k = Registry.CurrentUser.OpenSubKey(REG_KEY))
+                {
+                    if (k != null)
+                    {
+                        string v = (string)k.GetValue("panel_base", "");
+                        if (!string.IsNullOrEmpty(v)) _panelBase = v.TrimEnd('/');
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 依次试候选地址，返回第一份 success:true 的响应体以及命中的面板前缀；全失败返回 null。
+        // reachable = 至少有一个候选返回了 HTTP 响应（即使 success:false），用来区分
+        // 「面板不通」和「面板通了但这台机器上没有这个 uuid」，两种情况界面上要能看出区别。
+        internal static string FetchPanelJson(string host, string id, string preferredBase,
+                                              Func<string, string> fetch, out string hitBase)
+        {
+            bool reachable;
+            return FetchPanelJson(host, id, preferredBase, fetch, out hitBase, out reachable);
+        }
+
+        internal static string FetchPanelJson(string host, string id, string preferredBase,
+                                              Func<string, string> fetch, out string hitBase, out bool reachable)
+        {
+            hitBase = null;
+            reachable = false;
+            foreach (string url in PanelTrafficUrls(host, id, preferredBase))
+            {
+                string got = fetch(url);
+                if (string.IsNullOrEmpty(got)) continue;
+                reachable = true;
+                if (got.IndexOf("\"success\":true", StringComparison.Ordinal) < 0) continue;
+                hitBase = url.Substring(0, url.IndexOf("/panel/pub/traffic/", StringComparison.Ordinal));
+                return got;
+            }
+            return null;
+        }
+
+        // 到期文案。语义必须分清楚：0 = 面板真的不限（长期有效），
+        // null / 缺字段 / 解析失败 = 没拿到数据（不能冒充「长期有效」），
+        // 负值或 expiryPending = 「首连后 N 天」尚未激活。
+        private static string ExpireLine(object expiryTime, bool expiryPending, out Color color)
+        {
+            long exp;
+            color = ColorTranslator.FromHtml("#7a7a82");
+            if (!TryParseExpiry(expiryTime, out exp)) return "到期: 未获取";
+
+            if (exp < 0)
+            {
+                // 旧面板原样透传负值：-ms 即「首连后 N 天」，换算成未来时间点再报天数。
+                exp = -exp;
+                string pd = Math.Ceiling(exp / 86400000.0).ToString("0", CultureInfo.InvariantCulture);
+                return "到期: 未激活 (首连起" + pd + "天)";
+            }
+            if (exp > 1e11) exp /= 1000;          // 毫秒 → 秒
+            if (exp > 253402300799L) return "到期: 未获取";
+            if (exp == 0)
+            {
+                color = ColorTranslator.FromHtml("#7a7a82"); // 长期有效 / 0: 灰色
+                return "到期: 长期有效";
+            }
+
+            DateTime t = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(exp);
+            if (expiryPending)
+            {
+                int left = (int)Math.Ceiling((t - DateTime.UtcNow).TotalDays);
+                if (left < 0) left = 0;
+                return "到期: 未激活 (首连起" + left.ToString(CultureInfo.InvariantCulture) + "天)";
+            }
+            int days = (int)((t - DateTime.UtcNow).TotalDays);
+            if (days < 0)
+            {
+                color = ColorTranslator.FromHtml("#757575"); // 已过期: 暗灰
+                return "到期: 已过期 (" + t.ToLocalTime().ToString("yyyy/MM/dd") + ")";
+            }
+            else if (days > 7)
+            {
+                color = ColorTranslator.FromHtml("#06d6a0"); // >7天: 绿色
+            }
+            else if (days > 3)
+            {
+                color = ColorTranslator.FromHtml("#ffb74d"); // 4~7天: 橙色
+            }
+            else
+            {
+                color = ColorTranslator.FromHtml("#ef5350"); // <=3天: 红色
+            }
+            return "到期: " + t.ToLocalTime().ToString("yyyy/MM/dd") + " (" + days + "天)";
+        }
+
+        private void SetExpireLabel(string text, Color color)
+        {
+            try
+            {
+                if (InvokeRequired)
+                {
+                    if (!IsHandleCreated) return;
+                    BeginInvoke(new Action<string, Color>(SetExpireLabel), text, color);
+                    return;
+                }
+                _lblExpire.Text = text;
+                _lblExpire.ForeColor = color;
+            }
+            catch (Exception ex) { LogToFile("[UI] " + ex.Message); }
+        }
+
+        private void SetText(TransparentLabel l, string text)
+        {
+            try
+            {
+                if (InvokeRequired)
+                {
+                    if (!IsHandleCreated) return;
+                    BeginInvoke(new Action<TransparentLabel, string>(SetText), l, text);
+                    return;
+                }
+                l.Text = text;
+            }
+            catch (Exception ex) { LogToFile("[UI] " + ex.Message); }
+        }
+
+        private static string FmtBytes(long n)
+        {
+            if (n >= 1L << 30) return string.Format(CultureInfo.InvariantCulture, "{0:F2} GB", (double)n / (1L << 30));
+            if (n >= 1L << 20) return string.Format(CultureInfo.InvariantCulture, "{0:F2} MB", (double)n / (1L << 20));
+            if (n >= 1L << 10) return string.Format(CultureInfo.InvariantCulture, "{0:F2} KB", (double)n / (1L << 10));
+            return n + " B";
+        }
+
+        private class TrafficResp
+        {
+            public bool success;
+            public TrafficObj obj;
+        }
+        private class TrafficObj
+        {
+            public long up, down, total;
+            public object expiryTime;
+            public bool expiryPending;   // 面板标记「首连后 N 天」尚未激活（见 GetPubClientView）
+        }
+
+        private static bool TryParseExpiry(object v, out long ms)
+        {
+            ms = 0;
+            if (v == null) return false;
+            // JavaScriptSerializer 按 JSON 类型给出 Int64 / Int32 / double / string，统一走文本再解析。
+            string s = Convert.ToString(v, CultureInfo.InvariantCulture);
+            if (string.IsNullOrEmpty(s)) return false;
+            if (long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out ms)) return true;
+            double d;
+            if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out d) &&
+                d > -9.2e18 && d < 9.2e18)
+            {
+                ms = (long)Math.Round(d);
+                return true;
+            }
+            return false;
+        }
+
+        // ---------- 日志 ----------
+
+        private static readonly object _logLock = new object();
+        internal static void LogToFile(string msg)
+        {
+            try
+            {
+                lock (_logLock)
+                {
+                    string dir = Xray.BinDir;
+                    string path = Path.Combine(dir, "xpanel.log");
+                    File.AppendAllText(path,
+                        DateTime.Now.ToString("HH:mm:ss.fff") + " " + msg + Environment.NewLine,
+                        Encoding.UTF8);
+                }
+            }
+            catch { }
+        }
+    }
+}
