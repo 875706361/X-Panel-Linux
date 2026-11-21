@@ -47,7 +47,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.4.6";
+        internal const string VER = "v10.4.7";
 
         // 圆角两档：控件 8 / 卡片 12（Go v7.2.0 同值）
         internal const int R_CTRL = 8, R_CARD = 12;
@@ -218,12 +218,47 @@ namespace XPanelWin
             Close();
         }
 
-        // 点叉：隐藏到托盘，不真正退出；托盘菜单「退出」才真退
+        internal void ShowFromTrayPublic() { ShowFromTray(); }
+
+        // 点叉到底算不算「退出」：停在导入页就真退出，其它页面（仪表盘/设置）收进托盘。
+        // 单拎出来是为了能单测——「导入页点叉必须真的结束进程」是这轮的回归点。
+        internal static bool ShouldQuitOnClose(int page, bool connected)
+        {
+            if (connected) return false;       // 代理还在跑，收进托盘继续工作
+            return page == 1;                  // 还没登录节点的导入页：没有任何东西需要留在后台
+        }
+
+        // 第二个实例启动时，把已经在跑的窗口叫到前台（见 Program.Main）。
+        // UI 线程上调用，隐藏状态下 Show 出来并激活。
+        internal static void ActivateMain()
+        {
+            var f = Instance;
+            if (f == null) return;
+            try
+            {
+                if (f.InvokeRequired) { f.BeginInvoke(new Action(ActivateMain)); return; }
+                if (!f.Visible) f.ShowFromTrayPublic();
+                else
+                {
+                    if (f.WindowState == FormWindowState.Minimized) f.WindowState = FormWindowState.Normal;
+                    f.Activate();
+                    f.BringToFront();
+                }
+            }
+            catch { }
+        }
+
+        // 点叉：已登录/已保存节点时隐藏到托盘（代理还要继续跑）；
+        // 但停在导入页时没有任何在跑的东西，这时候「隐藏到托盘」等于骗用户已经关了：
+        // 再从桌面点图标会被单实例挡掉，看起来就是「点了叉就再也打不开」。导入页一律真退出。
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
-            if (_realExit || e.CloseReason == CloseReason.ApplicationExitCall || e.CloseReason == CloseReason.WindowsShutDown)
+            bool idle = ShouldQuitOnClose(_page, _connected);
+            if (_realExit || idle || e.CloseReason == CloseReason.ApplicationExitCall || e.CloseReason == CloseReason.WindowsShutDown)
             {
+                // idle 也走真退出的收尾，避免托盘图标残留成僵尸
+                _realExit = true;
                 // 真退出：断开代理并清理系统代理设置
                 try { if (_connected) StopProxy(); } catch { }
                 if (_tray != null) { _tray.Visible = false; _tray.Dispose(); _tray = null; }

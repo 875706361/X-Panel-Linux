@@ -156,6 +156,7 @@ internal static class ExpiryTests {
         CheckUpdateVersionGuard();
         CheckManifestBases();
         CheckHostOf();
+        CheckCloseOnImportPage();
 
         Console.WriteLine("Failures: " + failures);
         return failures == 0 ? 0 : 1;
@@ -182,5 +183,14 @@ internal static class ExpiryTests {
         CheckEquals("host of vless link",
             LinkParser.HostOf("vless://11111111-2222-3333-4444-555555555555@1.2.3.4:443?encryption=none&security=reality&pbk=aGVsbG93b3JsZA&type=tcp#t"), "1.2.3.4");
         CheckEquals("host of garbage is empty", LinkParser.HostOf("not a link"), "");
+    }
+
+    // 导入页点叉必须真退出：老版本一律隐藏到托盘，用户以为关了，再点图标被单实例挡掉，
+    // 只能去任务管理器杀进程。
+    static void CheckCloseOnImportPage() {
+        CheckEquals("close on import page quits", MainForm.ShouldQuitOnClose(1, false).ToString(), "True");
+        CheckEquals("close on dashboard hides to tray", MainForm.ShouldQuitOnClose(2, false).ToString(), "False");
+        CheckEquals("close on settings hides to tray", MainForm.ShouldQuitOnClose(3, false).ToString(), "False");
+        CheckEquals("close while connected hides to tray", MainForm.ShouldQuitOnClose(1, true).ToString(), "False");
     }
 }}

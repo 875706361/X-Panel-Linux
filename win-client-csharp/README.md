@@ -36,3 +36,12 @@ bash tests/run.sh
 - 已连接（加速中）时查询走本地 http 入站 `127.0.0.1:10809`，避免面板端口被干扰时查不到。
 - 单候选 1.2s 硬超时（`BeginGetResponse` + `WaitOne`，超时即 `Abort`），因为
   `HttpWebRequest.Timeout` 管不住 DNS/TCP 连接阶段，面板端口被丢包时会卡几十秒。
+
+## 关闭与单实例（`MainForm.OnFormClosing` / `Program.Main`）
+
+- 点叉的语义：**导入页**（还没登录节点、代理没在跑）真退出进程；仪表盘/设置页收进托盘，
+  托盘菜单「退出」才真退。导入页收托盘等于骗用户已经关了。
+- 第二个实例被单实例互斥挡住时，不能静默 `return`：先发命名事件让在跑的实例自己 `Show`，
+  不行再用 `FindWindowW` + `ShowWindow(SW_RESTORE)` 把隐藏的窗口拽出来（这一步连旧版本也能唤醒）；
+  两种都失败才按新实例启动 —— 宁可多开一个，也不要「点了图标一片安静」。
+- `ShouldQuitOnClose(page, connected)` 是上面第一条规则的唯一实现，单测直接覆盖。
