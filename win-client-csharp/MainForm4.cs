@@ -27,7 +27,7 @@ namespace XPanelWin
             if (n == null)
             {
                 LogToFile("[LOGIN] 解析失败");
-                _lblTip.Text = "链接格式错误，支持 vless:// vmess:// trojan:// ss://";
+                _lblTip.Text = "链接格式错误，支持 vless:// vmess:// trojan:// ss:// hy2://";
                 return;
             }
             LogToFile("[LOGIN] 解析成功 proto=" + n.proto + " " + n.address + ":" + n.port + " 切页");
