@@ -1,0 +1,5 @@
+// 资源脚本：把 DPI 清单和图标一起打进 XPanel.exe。
+// mcs 的 -win32icon 只能塞图标，塞不了清单；用 windres 生成 .res 后走 -win32res，
+// 图标与 RT_MANIFEST 就都在同一个资源节里。
+1 24 "app.manifest"
+MAINICON ICON "app.ico"

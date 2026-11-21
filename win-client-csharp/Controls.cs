@@ -127,14 +127,46 @@ namespace XPanelWin
     }
 
     // 无边框输入框：坐在窗口自绘的圆角白底上，自身保持不透明白底。
-    // 不要给它开 SupportsTransparentBackColor —— 透明背景要求父窗口先画好再回填，
-    // mono 下回填会抓错父缓冲区的偏移，在输入框两角糊出蓝色块。
+    // 不要给它开 SupportsTransparentBackColor —— 透明背景要求父窗口先画好再回填，mono 下回填会抓错父缓冲区的偏移，在输入框两角糊出蓝色块。
     internal class BorderedEdit : TextBox
     {
+        // 水印：多行 TextBox 没有原生 placeholder（EM_SETCUEBANNER 只对单行有效），
+        // 在 WM_PAINT 之后自己补一段浅灰提示；有内容或聚焦时自然消失。
+        // 不用叠一个 Label：WS_EX_TRANSPARENT 只改绘制顺序，照样会吃掉点击，焦点进不了输入框。
+        private string _placeholder = "";
+
+        public string Placeholder
+        {
+            get { return _placeholder; }
+            set { _placeholder = value ?? ""; Invalidate(); }
+        }
+
         public BorderedEdit()
         {
             BorderStyle = BorderStyle.None;
             BackColor = Color.White;
+        }
+
+        private const int WM_PAINT = 0x000F;
+        private const int WM_SETTEXT = 0x000C;
+
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+            if (m.Msg == WM_SETTEXT) { Invalidate(); return; }
+            if (m.Msg != WM_PAINT || _placeholder.Length == 0) return;
+            if (!string.IsNullOrEmpty(Text) || !Visible) return;
+            try
+            {
+                Rectangle rc = ClientRectangle;
+                rc.Offset(2, 2);
+                rc.Inflate(-2, 0);
+                using (var g = Graphics.FromHwnd(Handle))
+                    TextRenderer.DrawText(g, _placeholder, Font, rc, Color.FromArgb(0x8B, 0x93, 0xA0),
+                        TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.WordBreak |
+                        TextFormatFlags.NoPadding | TextFormatFlags.TextBoxControl);
+            }
+            catch { }
         }
     }
 }

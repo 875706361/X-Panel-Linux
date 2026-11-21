@@ -67,20 +67,43 @@ namespace XPanelWin
         }
 
         // 启动时调用：先立即检查一次（发现即装），之后周期性复查只看不装。
+        // 「刚打开」判定：进程起来后 STARTUP_WINDOW 内都算启动期，这期间发现新版直接安装
+        // （用户在等它自己升级）；超过这个窗口只提示，免得正在用的时候被突然重启。
+        // 开机的头两分钟内网络/面板常还没就绪，检查失败要快速补查几次，
+        // 否则一次连不上就退到 30 分钟节奏，用户会以为「自动更新根本没生效」。
+        private static readonly TimeSpan STARTUP_WINDOW = TimeSpan.FromMinutes(3);
+        private static readonly int[] STARTUP_RETRY_MS = { 6000, 15000, 35000, 90000 };
+
         public static void StartAutoLoop(string preferredBase, Func<string> hostProvider)
         {
-            Thread.Sleep(4000);
-            for (int round = 0; ; round++)
+            Thread.Sleep(1500);   // 让窗口先画出来，别和首帧抢启动时间
+            var clock = Stopwatch.StartNew();
+            int round = 0, retry = 0;
+            while (true)
             {
+                string st;
                 try
                 {
                     string host = hostProvider == null ? "" : hostProvider();
                     var bases = ManifestBases(host, preferredBase);
-                    var st = Check(bases, round == 0, out string msg);
-                    MainForm.LogToFile("[UPDATE] 第" + (round + 1) + "次检查: " + st + " " + msg);
+                    bool startup = clock.Elapsed < STARTUP_WINDOW;
+                    var state = Check(bases, startup, out string msg);
+                    st = state.ToString();
+                    MainForm.LogToFile("[UPDATE] 第" + (round + 1) + "次检查(" +
+                                       (startup ? "启动期" : "运行期") + "): " + st + " " + msg);
+                    if (state != State.Failed) retry = 0;
+                    else if (retry < STARTUP_RETRY_MS.Length - 1) retry++;
                 }
-                catch (Exception ex) { MainForm.LogToFile("[UPDATE] " + ex.Message); }
-                Thread.Sleep(30 * 60 * 1000);
+                catch (Exception ex)
+                {
+                    st = "Exception";
+                    MainForm.LogToFile("[UPDATE] 第" + (round + 1) + "次检查异常: " + ex.Message);
+                }
+                round++;
+                int wait = st == "Failed"
+                    ? STARTUP_RETRY_MS[Math.Min(retry, STARTUP_RETRY_MS.Length - 1)]
+                    : 30 * 60 * 1000;
+                Thread.Sleep(wait);
             }
         }
 

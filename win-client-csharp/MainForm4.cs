@@ -494,11 +494,22 @@ namespace XPanelWin
         internal static MainForm Instance;
 
         // 给「发现新版本」这类状态一个固定落点：底部速率栏每 2 秒被轮询重写，写那里会立刻消失。
+        // 导入页没有 _lblUpdate（那是仪表盘的），自动更新又主要发生在启动时还停在导入页的情况下，
+        // 所以这里顺带把提示写到导入页的提示行，否则「正在更新」对用户完全不可见。
         internal static void SetUpdateHint(string s)
         {
             var f = Instance;
             if (f == null) return;
             try { f.SetText(f._lblUpdate, s); } catch { }
+            try
+            {
+                if (f._page == 1 && f._lblTip != null)
+                {
+                    f._lblTip.ForeColor = Theme.C(Theme.ACCENT);
+                    f.SetText(f._lblTip, s);
+                }
+            }
+            catch { }
         }
 
         private void HandleCheckUpdate()

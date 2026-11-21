@@ -26,12 +26,40 @@ namespace XPanelWin
         const int LX0 = LM + LP;
         const int LXW = LCW - 2 * LP;
 
-        // page1：v10 栅格 —— 输入框收窄到 4 行，按钮上移，页面下半留白呼吸
-        const int P1TITLE_Y = 66, P1TITLE_H = 28;
-        const int P1SUB_Y = 98, P1SUB_H = 20;
-        const int EDIT_Y = 132, EDIT_H = 152;
-        const int BTN1_Y = 312, BTN1_H = 48;
-        const int TIP_Y = 376, TIP_H = 22;
+        // page1：v10.5 栅格 —— 标题紧贴标题栏、输入框加高到 160、协议徽标与按钮之间留足气口，
+        // 提示行/说明文字各自独立成行（旧版 tip 376..398 与 note 396..416 有 2px 重叠）。
+        // 底部说明改成「页脚」式：细分隔线 + 居中说明，钉在状态栏上方，
+        // 让按钮以下的留白读起来是排版，而不是内容没填满。
+        const int P1TITLE_Y = 62, P1TITLE_H = 28;
+        const int P1SUB_Y = 96, P1SUB_H = 20;
+        const int EDIT_Y = 126, EDIT_H = 200;
+        // 输入框白底由窗口自绘，TextBox 本身往里内缩，做出真正的内边距：
+        // 之前只内缩 1px，光标和水印紧贴左边框，视觉上像被裁掉半个字。
+        const int EDIT_PAD_X = 10, EDIT_PAD_TOP = 8, EDIT_PAD_BOTTOM = 6;
+        const int CHIP_Y = EDIT_Y + EDIT_H + 12, CHIP_H = 14;
+        const int BTN1_Y = 364, BTN1_H = 48;
+        const int TIP_Y = 418, TIP_H = 20;
+        const int DIV1_Y = 458;
+        const int NOTE_Y = 466, NOTE_H = 20;
+
+        // 导入页栅格的硬约束：元素顺序固定、相邻块之间至少 4px、页脚不压底栏。
+        // 上一版 tip(376..398) 与 note(396..416) 就叠了 2px——文字一多就糊成一片，
+        // 所以做成可单测的判定，后面再调间距不会又把两块叠回去。
+        internal static string CheckPage1Grid()
+        {
+            string[] names = { "title", "sub", "edit", "chips", "button", "tip", "note" };
+            int[] tops = { P1TITLE_Y, P1SUB_Y, EDIT_Y, CHIP_Y, BTN1_Y, TIP_Y, NOTE_Y };
+            int[] heights = { P1TITLE_H, P1SUB_H, EDIT_H, CHIP_H, BTN1_H, TIP_H, NOTE_H };
+            for (int i = 0; i < names.Length; i++)
+            {
+                if (heights[i] <= 0) return names[i] + " height <= 0";
+                if (i > 0 && tops[i] < tops[i - 1] + heights[i - 1] + 4)
+                    return names[i] + " overlaps or crowds " + names[i - 1];
+            }
+            if (NOTE_Y + NOTE_H > LWH - LBAR - 8) return "note runs into the bottom bar";
+            if (DIV1_Y <= TIP_Y + TIP_H || DIV1_Y >= NOTE_Y) return "footer divider out of place";
+            return "";
+        }
 
         // page2：卡片 62..302，仪表盘按 Go v7.2.0 栅格（v9.1 卡片内重排，底部让位模式分段）
         const int CARD2_Y = 62, CARD2_H = 240;
@@ -47,7 +75,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.4.7";
+        internal const string VER = "v10.5.0";
 
         // 圆角两档：控件 8 / 卡片 12（Go v7.2.0 同值）
         internal const int R_CTRL = 8, R_CARD = 12;

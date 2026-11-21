@@ -157,6 +157,7 @@ internal static class ExpiryTests {
         CheckManifestBases();
         CheckHostOf();
         CheckCloseOnImportPage();
+        CheckPage1Grid();
 
         Console.WriteLine("Failures: " + failures);
         return failures == 0 ? 0 : 1;
@@ -187,6 +188,10 @@ internal static class ExpiryTests {
 
     // 导入页点叉必须真退出：老版本一律隐藏到托盘，用户以为关了，再点图标被单实例挡掉，
     // 只能去任务管理器杀进程。
+    static void CheckPage1Grid() {
+        CheckEquals("page1 grid has no overlap", MainForm.CheckPage1Grid(), "");
+    }
+
     static void CheckCloseOnImportPage() {
         CheckEquals("close on import page quits", MainForm.ShouldQuitOnClose(1, false).ToString(), "True");
         CheckEquals("close on dashboard hides to tray", MainForm.ShouldQuitOnClose(2, false).ToString(), "False");

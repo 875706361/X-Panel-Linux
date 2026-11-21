@@ -20,8 +20,14 @@ for f in xray.exe geoip.dat geosite.dat hysteria.exe; do
     gzip -9 -c "resources/$f" > "$GZDIR/$f.gz"
 done
 
+# 资源节：app.res（windres 生成）= 图标 + DPI 清单。
+# 注意必须用 --output-format=res（.res 容器）：coff 格式会让 mcs 的 IKVM 反射层
+# 抛 BadImageFormatException（CS0016 Could not write to file 'XPanel'），
+# 而 mcs 的 -win32manifest 只是被静默忽略，不会真的写 RT_MANIFEST。
+x86_64-w64-mingw32-windres -i app.rc -o app.res --input-format=rc --output-format=res
+
 mcs -target:winexe -out:"$OUT" $SRC \
-    -win32icon:app.ico \
+    -win32res:app.res \
     -resource:"$GZDIR/xray.exe.gz",XPanelWin.resources.xray.exe.gz \
     -resource:"$GZDIR/geoip.dat.gz",XPanelWin.resources.geoip.dat.gz \
     -resource:"$GZDIR/geosite.dat.gz",XPanelWin.resources.geosite.dat.gz \

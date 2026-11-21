@@ -49,3 +49,8 @@ app/src/main/jniLibs/*/*.so
 /x-ui-new
 /x-ui.new
 x-panel
+
+# Windows 客户端构建产物与内核资源（体积大，靠 build.sh 从本机补）
+win-client-csharp/resources/
+win-client-csharp/.resgz/
+win-client-csharp/app.res

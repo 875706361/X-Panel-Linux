@@ -129,6 +129,16 @@ namespace XPanelWin
                 }
             }
             catch { }
+            // 诊断开关：XPL_DPI=144 可强制按 125% 栅格渲染，用来在没有高分屏的机器上
+            // 复现「缩放后文字挤在一起 / 半截字」这类问题（正式用户不会设置它）。
+            try
+            {
+                string ov = Environment.GetEnvironmentVariable("XPL_DPI");
+                int forced;
+                if (!string.IsNullOrEmpty(ov) && int.TryParse(ov, out forced) && forced >= 96 && forced <= 480)
+                    MainForm.DpiScale = forced / 96f;
+            }
+            catch { }
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);

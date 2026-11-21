@@ -51,10 +51,18 @@ namespace XPanelWin
                 Multiline = true,
                 ForeColor = Theme.C(Theme.TXT),
                 BackColor = Color.White,
-                ShortcutsEnabled = true
+                ShortcutsEnabled = true,
+                // 空框里给一行水印：168px 高的白框什么都不写时，用户会以为控件没渲染出来。
+                Placeholder = "在此粘贴节点链接，例如 vless://uuid@host:port?type=tcp&security=reality"
             };
             Controls.Add(_edit);
-            _edit.SetBounds(S(LM) + 1, S(EDIT_Y) + 1, S(LCW) - 2, S(EDIT_H) - 2);
+            // 白底圆角框由窗口自绘（PaintPage1），TextBox 内缩出左右 10 / 上 8 / 下 6 的内边距；
+            // 这样光标、水印、粘贴进去的链接都不会贴着边框。
+            _edit.SetBounds(
+                S(LM) + S(EDIT_PAD_X),
+                S(EDIT_Y) + S(EDIT_PAD_TOP),
+                S(LCW) - S(EDIT_PAD_X) * 2,
+                S(EDIT_H) - S(EDIT_PAD_TOP) - S(EDIT_PAD_BOTTOM));
 
             _edit.TextChanged += (s, e) => { if (_lblTip.Text != "") _lblTip.Text = ""; InvalidateInput(); };
             _edit.Enter += (s, e) => { _editFocused = true; InvalidateInput(); };
@@ -65,9 +73,10 @@ namespace XPanelWin
 
             _lblTip = MkLabel("", LM, TIP_Y, LCW, TIP_H, FSub, Theme.C(Theme.DANGER));
 
-            // 导入页底部说明：占住原来一大块空白，也顺带解释「下次启动不用再贴一遍」。
+            // 导入页页脚：钉在状态栏上方（NOTE_Y），与主体之间用一条细分隔线（DIV1_Y，见 PaintPage1），
+            // 这样按钮以下的留白是「排版留白」而不是「没填满」。
             _lblNote1 = MkLabel("链接只保存在本机注册表，不会上传；已保存后启动直接进入仪表盘",
-                LM, 396, LCW, 20, FSub, Theme.C(Theme.FAINT));
+                LM, NOTE_Y, LCW, NOTE_H, FSub, Theme.C(Theme.FAINT));
             _lblNote1.TextAlign = ContentAlignment.MiddleCenter;
 
             _page1.AddRange(new Control[] { _lblTitle1, _lblSub1, _edit, _btnLogin, _lblTip, _lblNote1 });

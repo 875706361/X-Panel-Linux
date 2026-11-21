@@ -114,7 +114,7 @@ namespace XPanelWin
             if (cur == "HYSTERIA2") cur = "HY2";
             using (var f = new Font("Consolas", 8.25f))
             {
-                int gap = S(16), py = S(EDIT_Y) + S(EDIT_H) + S(10);
+                int gap = S(16), py = S(CHIP_Y);
                 var widths = new int[protos.Length];
                 int total = 0;
                 for (int i = 0; i < protos.Length; i++)
@@ -127,11 +127,15 @@ namespace XPanelWin
                 for (int i = 0; i < protos.Length; i++)
                 {
                     bool on = cur.Length > 0 && cur == protos[i];
-                    TextRenderer.DrawText(g, protos[i], f, new Rectangle(px, py, widths[i] + 2, S(14)),
-                        on ? Theme.C(Theme.ACCENT) : Theme.C(0xB9BEC7), TextFormatFlags.NoPadding);
+                    TextRenderer.DrawText(g, protos[i], f, new Rectangle(px, py, widths[i] + 2, S(CHIP_H)),
+                        on ? Theme.C(Theme.ACCENT) : Theme.C(0xAEB4BF), TextFormatFlags.NoPadding);
                     px += widths[i] + gap;
                 }
             }
+
+            // 页脚分隔线：把「说明文字」和上面的操作区隔开，视觉上收住下半页
+            using (var p = new Pen(Theme.C(0xE9EBF0), 1))
+                g.DrawLine(p, S(LM), S(DIV1_Y), S(LM) + S(LCW), S(DIV1_Y));
         }
 
         // 三段渐淡软阴影：贴在元素下缘 3px，只往下不出左右头（Go softShadow 同款，
