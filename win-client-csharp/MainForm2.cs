@@ -71,8 +71,11 @@ namespace XPanelWin
         // page2：状态 / 到期 / 累计流量 / 上下载 / 启动加速 / 更换节点
         private void BuildPage2()
         {
-            _lblStatus = MkLabel("未连接", LX0 + 14, STATUS_Y, LXW / 2 - 14, STATUS_H, FStat, Theme.C(Theme.IDLE));
-            _lblExpire = MkLabel("到期: --", LX0 + LXW / 2, STATUS_Y, LXW / 2, STATUS_H, FStat, Theme.C(Theme.ACCENT));
+            _lblStatus = MkLabel("未连接", LX0 + 14, STATUS_Y, 116, STATUS_H, FStat, Theme.C(Theme.IDLE));
+            // 到期文案最长是「到期: 未激活 (首连起30天)」，右半格 185px 在雅黑 Bold 14px 下会贴边被裁，
+            // 状态字串最多 7 个字（正在连接...），把中线左移给它让出宽度。
+            _lblExpire = MkLabel("到期: --", LX0 + 130, STATUS_Y, LXW - 130, STATUS_H, FStat, Theme.C(Theme.ACCENT));
+            _lblExpire.TextAlign = ContentAlignment.MiddleRight;
             _lblTotal = MkLabel("累计已用流量", LX0, TOTAL_Y, LXW, TOTAL_H, FSub, Theme.C(Theme.MUTED));
             _lblTraffic = MkLabel("0.00 MB", LX0, TRAFFIC_Y, LXW, TRAFFIC_H, FVal, Theme.C(Theme.TXT));
             _lblUpLbl = MkLabel("↑ 累计上传", LX0, COL_LBL_Y, LXW / 2, COL_LBL_H, FSub, Theme.C(Theme.MUTED));

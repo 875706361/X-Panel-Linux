@@ -130,6 +130,16 @@ internal static class ExpiryTests {
         Check("float timestamp", 1893456000000d, "2030/01/01");
         Check("expired timestamp", 1000000000000L, "已过期");
 
+        // 回归：到期后不足一天曾被截断成「今天 (0天)」，界面看起来还没到期，
+        // 但面板此时已经停用了账号；最后一天要按小时报。
+        long nowMs = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalMilliseconds;
+        Check("expired two hours ago reads expired", nowMs - 2 * 3600 * 1000L, "已过期");
+        Check("last day reports hours", nowMs + 5 * 3600 * 1000L, "小时");
+        Check("just under 24h reports hours", nowMs + 23 * 3600 * 1000L, "小时");
+        Check("thirty days left stays in days", nowMs + 29L * 86400000L + 3600 * 1000L, "29天");
+        // 负值以秒存储的旧面板：-2592000 = 30 天，不能算成 43 分钟。
+        Check("negative seconds duration", -2592000L, "首连起30天");
+
         // 端到端（真实面板响应形态）
         CheckResponse("panel: pending activation flag",
             "{\"success\":true,\"obj\":{\"expiryTime\":1893456000000,\"expiryPending\":true}}", "未激活");

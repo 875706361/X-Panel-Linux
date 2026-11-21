@@ -423,7 +423,10 @@ namespace XPanelWin
             if (exp < 0)
             {
                 // 旧面板原样透传负值：-ms 即「首连后 N 天」，换算成未来时间点再报天数。
+                // 个别版本把负值写成秒（-2592000）；面板只按「天」下发，绝对值不足 1 天
+                // 毫秒(86400000)的负值必然是秒，不归一会把 30 天算成 43 分钟。
                 exp = -exp;
+                if (exp < 86400000) exp *= 1000;
                 string pd = Math.Ceiling(exp / 86400000.0).ToString("0", CultureInfo.InvariantCulture);
                 return "到期: 未激活 (首连起" + pd + "天)";
             }
@@ -436,19 +439,31 @@ namespace XPanelWin
             }
 
             DateTime t = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(exp);
+            DateTime now = DateTime.UtcNow;
+            string day = t.ToLocalTime().ToString("yyyy/MM/dd");
             if (expiryPending)
             {
-                int left = (int)Math.Ceiling((t - DateTime.UtcNow).TotalDays);
+                int left = (int)Math.Ceiling((t - now).TotalDays);
                 if (left < 0) left = 0;
                 return "到期: 未激活 (首连起" + left.ToString(CultureInfo.InvariantCulture) + "天)";
             }
-            int days = (int)((t - DateTime.UtcNow).TotalDays);
-            if (days < 0)
+            // 过期必须按「时间点」判断：按整天截断会把到期后 12 小时算成 0 天，
+            // 界面上显示「今天 (0天)」，看起来像还没到期，而面板已经停用了这个账号。
+            TimeSpan leftSpan = t - now;
+            if (leftSpan <= TimeSpan.Zero)
             {
                 color = ColorTranslator.FromHtml("#757575"); // 已过期: 暗灰
-                return "到期: 已过期 (" + t.ToLocalTime().ToString("yyyy/MM/dd") + ")";
+                return "到期: 已过期 (" + day + ")";
             }
-            else if (days > 7)
+            if (leftSpan.TotalHours < 24)         // 最后一天报小时，避免「0天」歧义
+            {
+                int hours = (int)Math.Ceiling(leftSpan.TotalHours);
+                if (hours < 1) hours = 1;
+                color = ColorTranslator.FromHtml("#ef5350");
+                return "到期: " + day + " (" + hours.ToString(CultureInfo.InvariantCulture) + "小时)";
+            }
+            int days = (int)leftSpan.TotalDays;
+            if (days > 7)
             {
                 color = ColorTranslator.FromHtml("#06d6a0"); // >7天: 绿色
             }

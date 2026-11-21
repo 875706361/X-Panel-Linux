@@ -2067,8 +2067,15 @@ func (s *InboundService) GetPubClientView(id string) (map[string]any, bool) {
 			// 当成长期有效, 这里换算成绝对时间并给出标记, 客户端可显示「未激活」。
 			expiryPending := false
 			if exp < 0 {
+				// 负值 = 「首连后 N 天」的时长。主流版本存毫秒(如 -2592000000 = 30 天)，
+				// 少数写入路径存的是秒：面板只按「天」下发，所以绝对值不足 1 天毫秒
+				// (<86400000) 的负值必然是秒，先归一，否则 30 天会被算成 43 分钟后到期。
 				expiryPending = true
-				exp = time.Now().UnixMilli() - exp
+				d := -exp
+				if d < 86400000 {
+					d *= 1000
+				}
+				exp = time.Now().UnixMilli() + d
 			}
 			// 统一成毫秒: 个别面板把到期写成秒(10 位), 客户端各有各的判断, 服务端收敛掉。
 			if exp > 0 && exp < 1e11 {
