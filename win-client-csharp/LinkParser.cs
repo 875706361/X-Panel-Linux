@@ -11,8 +11,10 @@ namespace XPanelWin
         public string proto;                       // vless | vmess | trojan | ss | hy2
         public string uuid, address, port;         // ss: uuid=method:pass
         public string sni, pbk, sid, flow;         // vless reality / trojan tls
-        public string net = "tcp", path = "", type = "", security = ""; // vmess 传输层 / hy2 obfs-password
+        public string net = "tcp", path = "", type = "", security = ""; // vmess 传输层
         public bool insecure;                      // hy2: 跳过证书校验
+        public string obfs = "", obfsPw = "";      // hy2: obfs 类型（salamander/gecko）与其密码
+        public string up = "", down = "";          // hy2: 带宽声明（可选，缺省由内核自估）
         public string name = "";                   // 备注
     }
 
@@ -45,32 +47,34 @@ namespace XPanelWin
 
         private static NodeInfo ParseOne(string raw)
         {
-            if (raw.StartsWith("vless://")) return ParseVless(raw);
-            if (raw.StartsWith("trojan://")) return ParseTrojan(raw);
-            if (raw.StartsWith("vmess://")) return ParseVmess(raw);
-            if (raw.StartsWith("ss://")) return ParseSs(raw);
-            if (raw.StartsWith("hy2://") || raw.StartsWith("hysteria2://")) return ParseHy2(raw);
+            // scheme 大小写不敏感：有的订阅/手抄会把 HY2:// 写大写
+            string lower = raw.Length > 12 ? raw.Substring(0, 12).ToLowerInvariant() : raw.ToLowerInvariant();
+            if (lower.StartsWith("vless://")) return ParseVless(raw);
+            if (lower.StartsWith("trojan://")) return ParseTrojan(raw);
+            if (lower.StartsWith("vmess://")) return ParseVmess(raw);
+            if (lower.StartsWith("ss://")) return ParseSs(raw);
+            if (lower.StartsWith("hy2://") || lower.StartsWith("hysteria2://")) return ParseHy2(raw);
             return null;
         }
 
-        // hysteria2://auth@host:port?sni=..&insecure=1&obfs=salamander&obfs-password=..&pinSHA256=..#tag
-        // hy2:// 同格式。auth 可能 URL 编码。
+        // hysteria2://auth@host:port/?sni=..&insecure=1&obfs=salamander&obfs-password=..&pinSHA256=..#tag
+        // hy2:// 同格式。auth 可能 URL 编码。也兼容 auth 放在 query（hy2://host:port?auth=..）。
         private static NodeInfo ParseHy2(string raw)
         {
-            string scheme = raw.StartsWith("hy2://") ? "hy2://" : "hysteria2://";
-            string uuid, address, port, sni, pbk, sid, flow;
-            if (!ParseUserHost(raw.Substring(scheme.Length), out uuid, out address, out port, out sni, out pbk, out sid, out flow)) return null;
-            int p; if (!int.TryParse(port, out p) || p <= 0 || p > 65535) return null;
+            int sep = raw.IndexOf("://");
+            string scheme = raw.Substring(0, sep + 3);
+            string user, address, port, sni, pbk, sid, flow;
+            // 无 userinfo 的写法（auth 在 query 里）也放行
+            if (!ParseUserHost(raw.Substring(scheme.Length), out user, out address, out port, out sni, out pbk, out sid, out flow, true)) return null;
             var n = new NodeInfo
             {
                 proto = "hy2",
-                uuid = Uri.UnescapeDataString(uuid),
+                uuid = Uri.UnescapeDataString(user),
                 address = address,
                 port = port,
                 sni = sni,
                 name = TagOf(raw)
             };
-            // query 里的 hy2 专有参数复用 ParseUserHost 已解析的 pbk=pinSHA256；insecure/obfs-password 单独抓
             int q = raw.IndexOf('?');
             if (q >= 0)
             {
@@ -80,12 +84,20 @@ namespace XPanelWin
                 {
                     int eq = kv.IndexOf('=');
                     if (eq < 0) continue;
-                    string k = kv.Substring(0, eq), v = Uri.UnescapeDataString(kv.Substring(eq + 1));
-                    if (k == "insecure" || k == "allowInsecure") n.insecure = (v == "1" || v == "true");
-                    else if (k == "obfs-password") n.type = v;
-                    else if (k == "pinSHA256" || k == "pinsha256") n.pbk = v;
+                    string k = kv.Substring(0, eq).ToLowerInvariant(), v = Uri.UnescapeDataString(kv.Substring(eq + 1));
+                    if (k == "insecure" || k == "allowinsecure") n.insecure = (v == "1" || v == "true" || v == "yes");
+                    else if (k == "obfs") n.obfs = v.ToLowerInvariant();
+                    else if (k == "obfs-password" || k == "obfspassword" || k == "obfs-pw") n.obfsPw = v;
+                    else if (k == "pinsha256") n.pbk = v;
+                    else if ((k == "auth" || k == "password") && n.uuid.Length == 0) n.uuid = v;
+                    else if (k == "up" || k == "upmbps") n.up = v;
+                    else if (k == "down" || k == "downmbps") n.down = v;
                 }
             }
+            // 有 obfs 密码没写类型时按 salamander（hysteria2 唯一被广泛部署的 obfs）
+            if (n.obfs.Length == 0 && n.obfsPw.Length > 0) n.obfs = "salamander";
+            // obfs 只认 hysteria2 支持的两种；写了别的类型宁可不带 obfs，也不要生成一份内核会拒绝的配置
+            if (n.obfs.Length > 0 && n.obfs != "salamander" && n.obfs != "gecko") { n.obfs = ""; n.obfsPw = ""; }
             return n;
         }
 
@@ -115,14 +127,17 @@ namespace XPanelWin
         }
 
         // 共用：user@host:port?query#tag
+        // 注意 authority 尾巴上的 '/'：`hy2://pw@host:443/?sni=..` 是很多客户端导出的写法，
+        // 不剥掉就会拿 "443/" 去 int.TryParse，整条链接判为格式错误。
         private static bool ParseUserHost(string body, out string user, out string address, out string port,
-                                          out string sni, out string pbk, out string sid, out string flow)
+                                          out string sni, out string pbk, out string sid, out string flow,
+                                          bool allowEmptyUser = false)
         {
             user = address = port = sni = pbk = sid = flow = "";
             int at = body.IndexOf('@');
-            if (at < 0) return false;
-            user = body.Substring(0, at);
-            string rest = body.Substring(at + 1);
+            if (at < 0 && !allowEmptyUser) return false;
+            if (at >= 0) { user = body.Substring(0, at); body = body.Substring(at + 1); }
+            string rest = body;
             int q = rest.IndexOfAny(new[] { '?', '#' });
             string hostport = q < 0 ? rest : rest.Substring(0, q);
             string query = "";
@@ -131,11 +146,12 @@ namespace XPanelWin
                 int h = rest.IndexOf('#', q);
                 query = h < 0 ? rest.Substring(q + 1) : rest.Substring(q + 1, h - q - 1);
             }
+            hostport = hostport.Trim().TrimEnd('/');
             int c = hostport.LastIndexOf(':');
             if (c < 0) return false;
-            address = hostport.Substring(0, c);
+            address = hostport.Substring(0, c).Trim('[', ']');
             port = hostport.Substring(c + 1);
-            if (user.Length == 0 || address.Length == 0 || port.Length == 0) return false;
+            if ((!allowEmptyUser && user.Length == 0) || address.Length == 0 || port.Length == 0) return false;
             int p; if (!int.TryParse(port, out p) || p <= 0 || p > 65535) return false;
 
             foreach (string kv in query.Split(new[] { '&' }))

@@ -19,6 +19,10 @@ namespace XPanelWin
         {
             get
             {
+                // 诊断/测试用：XPL_KERNEL_DIR 指向已有内核的目录（Windows 上可指向解压好的 %TEMP%\XPanel，
+                // 省掉每次释放 90MB 资源；Linux 上用 mono 跑界面时指向 Linux 版内核做联调）
+                string env = Environment.GetEnvironmentVariable("XPL_KERNEL_DIR");
+                if (!string.IsNullOrEmpty(env) && Directory.Exists(env)) return env;
                 string dir = Path.Combine(Path.GetTempPath(), "XPanel");
                 if (!Directory.Exists(dir))
                 {
@@ -31,6 +35,7 @@ namespace XPanelWin
         // 释放内嵌资源。已存在且字节数一致则跳过，避免每次启动写盘。
         public static void EnsureFiles()
         {
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("XPL_KERNEL_DIR"))) return;   // 外部内核目录，不用释放
             var asm = System.Reflection.Assembly.GetExecutingAssembly();
             foreach (string name in RequiredFiles)
             {
@@ -221,17 +226,30 @@ namespace XPanelWin
 
         // hysteria2 走独立内核 hysteria.exe（Xray 不支持 hy2）。
         // 配置用官方 YAML：socks+http 入站 10808/10809 与 xray 版对齐；bypassCn 用 acl 分流。
+        //
+        // 三个必须踩准的点（都是内核会直接 FATAL 或静默走错的）：
+        // 1) obfs 密码在 hysteria2 里是 **按类型名嵌套**（obfs.salamander.password），
+        //    写成 obfs.password 会被当成"没设密码"，内核报
+        //    `invalid config: obfs.salamander.password: PSK must be at least 4 bytes` 后秒退。
+        // 2) 所有标量都要 YAML 引号：密码里出现 `:` `#` `{` 或指到 `-`，裸写会被截断/报错，
+        //    现象是"配置看起来没错但认证一直失败"。
+        // 3) server 里的 IPv6 地址必须带方括号。
         public static string BuildHy2Config(NodeInfo n, bool bypassCn)
         {
+            string host = n.address.IndexOf(':') >= 0 ? "[" + n.address + "]" : n.address;
             var sb = new StringBuilder();
-            sb.Append("server: ").Append(n.address).Append(':').Append(n.port).Append('\n');
-            sb.Append("auth: ").Append(n.uuid).Append('\n');
-            sb.Append("tls:\n  sni: ").Append(string.IsNullOrEmpty(n.sni) ? "bing.com" : n.sni).Append('\n');
+            sb.Append("server: ").Append(Q(host + ":" + n.port)).Append('\n');
+            sb.Append("auth: ").Append(Q(n.uuid)).Append('\n');
+            sb.Append("tls:\n  sni: ").Append(Q(n.sni.Length > 0 ? n.sni : n.address)).Append('\n');
             if (n.insecure) sb.Append("  insecure: true\n");
-            if (!string.IsNullOrEmpty(n.pbk)) sb.Append("  pinSHA256: ").Append(n.pbk).Append('\n');
-            if (!string.IsNullOrEmpty(n.type))   // obfs=salamander 时 LinkParser 把 obfs-password 放 type
-                sb.Append("obfs:\n  type: salamander\n  password: ").Append(n.type).Append('\n');
-            sb.Append("bandwidth:\n  up: 100 mbps\n  down: 200 mbps\n");
+            if (!string.IsNullOrEmpty(n.pbk)) sb.Append("  pinSHA256: ").Append(Q(n.pbk)).Append('\n');
+            if (!string.IsNullOrEmpty(n.obfs) && !string.IsNullOrEmpty(n.obfsPw))
+            {
+                sb.Append("obfs:\n  type: ").Append(n.obfs).Append('\n');
+                sb.Append("  ").Append(n.obfs).Append(":\n    password: ").Append(Q(n.obfsPw)).Append('\n');
+            }
+            // 带宽只是声明，内核会自适应；链接里带了就尊重它（少报会限制 Brutal 吞吐）
+            sb.Append("bandwidth:\n  up: ").Append(Q(Bw(n.up, "100"))).Append("\n  down: ").Append(Q(Bw(n.down, "200"))).Append('\n');
             sb.Append("socks5:\n  listen: 127.0.0.1:10808\n");
             sb.Append("http:\n  listen: 127.0.0.1:10809\n");
             if (bypassCn)
@@ -246,7 +264,131 @@ namespace XPanelWin
             return sb.ToString();
         }
 
-        // 拉起内核：proto=hy2 用 hysteria.exe -c，其余 xray.exe run -c
+        // 带宽值：链接里可能只给数字（"100"），hysteria2 需要带单位，补 mbps
+        private static string Bw(string v, string dflt)
+        {
+            if (string.IsNullOrEmpty(v)) return dflt + " mbps";
+            v = v.Trim();
+            foreach (char c in v) if (!char.IsDigit(c) && c != '.') return v;   // 已带单位
+            return v + " mbps";
+        }
+
+        // YAML 双引号标量：转义反斜杠与引号，去掉控制字符（换行塞进配置只会让内核解析失败）
+        private static string Q(string v)
+        {
+            var sb = new StringBuilder("\"");
+            foreach (char c in v ?? "")
+            {
+                if (c == '\\' || c == '"') sb.Append('\\').Append(c);
+                else if (c < 0x20) sb.Append(' ');
+                else sb.Append(c);
+            }
+            return sb.Append('"').ToString();
+        }
+
+        // 内核输出的最近若干行：拉起失败时要把内核自己说的那句话报给用户，
+        // 而不是笼统的"连接失败"（hy2 的配置错误/认证失败全在这一行里）。
+        private static readonly object _logLock = new object();
+        private static readonly List<string> _recent = new List<string>();
+
+        private static void PushLog(string line)
+        {
+            lock (_logLock)
+            {
+                _recent.Add(line);
+                if (_recent.Count > 40) _recent.RemoveAt(0);
+            }
+        }
+
+        public static string LastLogLine()
+        {
+            lock (_logLock)
+            {
+                for (int i = _recent.Count - 1; i >= 0; i--)
+                {
+                    string l = _recent[i];
+                    if (l.IndexOf("FATAL", StringComparison.OrdinalIgnoreCase) >= 0
+                        || l.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0
+                        || l.IndexOf("failed", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return l;
+                }
+                return _recent.Count > 0 ? _recent[_recent.Count - 1] : "";
+            }
+        }
+
+        // 等内核真正可用：端口能连上才算"连上"。
+        // hy2 是先握手成功才监听 http 入站，所以这一步同时验证了认证/obfs/TLS —— 之前的实现
+        // 只看 Process.Start 没抛异常就宣布"已连接"，内核秒退时用户看到的是"已连接但没网"。
+        public static bool WaitReady(Process p, int port, int timeoutMs, out string err)
+        {
+            err = "";
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                if (p != null)
+                {
+                    try { if (p.HasExited) { err = LastLogLine(); return false; } }
+                    catch { }
+                }
+                try
+                {
+                    using (var c = new System.Net.Sockets.TcpClient())
+                    {
+                        var ar = c.BeginConnect("127.0.0.1", port, null, null);
+                        if (ar.AsyncWaitHandle.WaitOne(400) && c.Connected)
+                        {
+                            c.EndConnect(ar);
+                            // 端口通了也可能是"上一次的僵尸内核还占着"，本进程其实已经 FATAL 退出前的
+                            // 绑定失败状态；看到绑定失败就按失败处理，别把它当成本次连接成功。
+                            string last = LastLogLine();
+                            if (last.IndexOf("already in use", StringComparison.OrdinalIgnoreCase) >= 0
+                                || last.IndexOf("address in use", StringComparison.OrdinalIgnoreCase) >= 0)
+                            { err = last; return false; }
+                            return true;
+                        }
+                    }
+                }
+                catch { }
+                System.Threading.Thread.Sleep(150);
+            }
+            err = LastLogLine();
+            return false;
+        }
+
+        // 把内核那行日志压成一行短提示（完整内容仍在日志文件里）
+        internal static string Short(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return "内核没有响应";
+            string s = line.Replace('\t', ' ').Trim();
+            int i = s.IndexOf("\"error\":");
+            if (i >= 0) s = s.Substring(i + 8).Trim();
+            s = s.Trim('{', '}', ' ', '"');
+            if (s.Length > 120) s = s.Substring(0, 120) + "…";
+            return s;
+        }
+
+        // 内核报错翻成人话：hysteria2 的原话（authentication error, HTTP status code: 301）对
+        // 用户毫无意义，得说清楚是哪一环不对、该去改什么。
+        internal static string Friendly(string raw)
+        {
+            string s = (raw ?? "").ToLowerInvariant();
+            if (s.Length == 0) return "内核没有响应（端口未打开）";
+            if (s.Contains("authentication error") || s.Contains("auth failed"))
+                return "认证失败，检查密码与 obfs 密码是否与服务器一致";
+            if (s.Contains("psk must be") || s.Contains("obfs"))
+                return "obfs 密码不对（salamander 密码需 ≥4 字节且与服务端一致）";
+            if (s.Contains("already in use") || s.Contains("address in use"))
+                return "本地端口 10808/10809 被占用（可能上一次的内核还在跑）";
+            if (s.Contains("x509") || s.Contains("certificate") || s.Contains("tls:"))
+                return "TLS 证书校验失败，检查 sni/pinSHA256，或在链接里加 insecure=1";
+            if (s.Contains("no such host") || s.Contains("i/o timeout") || s.Contains("connection refused")
+                || s.Contains("dial tcp") || s.Contains("timeout"))
+                return "连不上服务器（地址/端口不通，或被墙）";
+            if (s.Contains("invalid config") || s.Contains("failed to parse"))
+                return "内核拒绝配置：" + Short(raw);
+            return Short(raw);
+        }
+
         public static Process Start(string configJson, string proto)
         {
             string exe, args, cfgPath;
@@ -288,7 +430,10 @@ namespace XPanelWin
                         {
                             string line;
                             while ((line = r.ReadLine()) != null)
+                            {
+                                PushLog(line);
                                 MainForm.LogToFile(tag + " " + line);
+                            }
                         }
                     }
                     catch { }
@@ -301,7 +446,10 @@ namespace XPanelWin
                         {
                             string line;
                             while ((line = r.ReadLine()) != null)
-                                MainForm.LogToFile("[XRAY-ERR] " + line);
+                            {
+                                PushLog(line);
+                                MainForm.LogToFile(tag + "-ERR " + line);
+                            }
                         }
                     }
                     catch { }

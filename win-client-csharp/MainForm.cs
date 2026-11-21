@@ -75,7 +75,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.1";
+        internal const string VER = "v10.5.2";
 
         // 圆角两档：控件 8 / 卡片 12（Go v7.2.0 同值）
         internal const int R_CTRL = 8, R_CARD = 12;
@@ -87,6 +87,9 @@ namespace XPanelWin
 
         private int _page = 1;
         private bool _connected, _busy;
+        // 每次发起/取消连接都自增：异步就绪检查回来时若代数已变，说明用户已经断开或又点了
+        // 一次，这次结果必须丢弃，否则会把系统代理又打开。
+        private int _connectGen;
         private string _serverUuid = "";
         private string _panelBase = "";   // 最近一次命中 success:true 的面板前缀，轮询优先复用
         private NodeInfo _node;   // 当前登录节点（四协议统一）

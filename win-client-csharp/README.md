@@ -69,3 +69,26 @@ bash tests/run.sh
   不会一次失败就退到 30 分钟节奏；超过启动期只提示不打断（避免正在用时被重启）。
 - 版本号护栏：清单里的版本 ≤ 本机版本一律不动，旧镜像即使 sha 不同也不会把人降级。
 - 提示同时写到仪表盘那行和导入页的提示行——启动更新时用户多半还停在导入页。
+
+## hysteria2（hy2）接入（v10.5.2）
+
+Xray 不支持 hy2，客户端为它单开 `hysteria.exe` 内核，配置由 `Xray.BuildHy2Config` 生成。
+这一版修掉的是三个"看起来能连、实际连不上"的真问题：
+
+- **链接尾巴带斜杠**。`hy2://pw@host:443/?sni=..&insecure=1` 是常见导出格式，旧解析把
+  `443/` 直接 `int.TryParse`，整条链接判成格式错误（界面只显示"链接格式错误"，看着像不支持 hy2）。
+  现在 authority 会剥掉尾部 `/`，并支持 `hysteria2://`、大写 scheme、无 userinfo 用 `?auth=..`、
+  IPv6 `[::1]:443`。
+- **obfs 密码写在错误的层级**。hysteria2 的字段是 `obfs.salamander.password`（按类型名嵌套），
+  旧代码生成 `obfs: {type: salamander, password: ..}`，内核启动即
+  `FATAL invalid config: obfs.salamander.password: PSK must be at least 4 bytes` 秒退。
+  现在按 `obfs.<type>.password` 生成，`salamander` 与 `gecko` 两种都验过（本地起服务端跑通）。
+- **YAML 没转义**。密码里带 `:` `#` `"` 时裸写会被截断成别的值（认证一直失败、但配置看着没问题）。
+  现在所有标量都走双引号转义；`sni` 缺省时回落到节点地址，不再硬编码成 `bing.com`。
+
+连接状态也不再撒谎：`Xray.WaitReady` 等内核真的把 10809 监听起来才切系统代理（hy2 是先握手成功
+才监听，所以这一步等于验证了密码/obfs/TLS），内核秒退或超时就撤销系统代理、状态显示"连接失败"，
+失败原因用中文写到仪表盘底部那行（状态位只有 116px，塞不下完整原因）。内核原话仍记在日志里。
+
+联调开关：`XPL_KERNEL_DIR=<目录>` 让客户端用该目录下的内核（不再释放内嵌资源），
+Linux 上可以用同名 `hysteria.exe` 包装脚本指向 Linux 版 hysteria 跑界面联调。

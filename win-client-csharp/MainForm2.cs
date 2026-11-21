@@ -1,6 +1,8 @@
 // 主窗口（第二部分：控件构建与样式）
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Drawing;
 using System.Linq;
@@ -170,8 +172,44 @@ namespace XPanelWin
             {
                 Xray.Stop(_xray);
                 _xray = null;
-                try { _xray = Xray.Start(_node.proto == "hy2" ? Xray.BuildHy2Config(_node, bypass) : Xray.BuildConfig(_node, bypass), _node.proto); }
-                catch (Exception ex) { LogToFile("[XRAY] " + ex.Message); }
+                try
+                {
+                    _xray = Xray.Start(_node.proto == "hy2" ? Xray.BuildHy2Config(_node, bypass) : Xray.BuildConfig(_node, bypass), _node.proto);
+                }
+                catch (Exception ex)
+                {
+                    LogToFile("[XRAY] " + ex.Message);
+                    _connected = false;
+                    SetSystemProxy(false, "");
+                    SetConnButton(false);
+                    ShowTip("切换模式失败：" + ex.Message, true);
+                    return;
+                }
+                // 新内核起不来（配置被拒/内核秒退）就把连接状态收回去，别让"已连接"挂在死端口上
+                Process pr = _xray;
+                int gen; lock (_stateLock) gen = ++_connectGen;
+                int waitMs = _node.proto == "hy2" ? 9000 : 3500;
+                var th = new Thread(() =>
+                {
+                    string err;
+                    bool ok = Xray.WaitReady(pr, 10809, waitMs, out err);
+                    bool stale; lock (_stateLock) stale = (gen != _connectGen);
+                    if (stale || ok) return;
+                    Xray.Stop(pr);
+                    LogToFile("[CONN] 切换模式后内核未就绪: " + err);
+                    Post(() =>
+                    {
+                        _xray = null;
+                        _connected = false;
+                        SetSystemProxy(false, "");
+                        SetConnButton(false);
+                        SetFooterHint("✕ 切换模式失败：" + Xray.Friendly(err), true);
+                        SetStatus("连接失败", Theme.C(Theme.DANGER));
+                        Invalidate();
+                    });
+                });
+                th.IsBackground = true;
+                th.Start();
             }
         }
 

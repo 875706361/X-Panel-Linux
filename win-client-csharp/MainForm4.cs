@@ -128,21 +128,93 @@ namespace XPanelWin
                 return;
             }
             _xray = p;
-            SetSystemProxy(true, "127.0.0.1:10809");
-            _connected = true;
-            SetConnButton(true);
-            SetStatus("已连接 · " + n.proto.ToUpper() + (n.name.Length > 0 ? " · " + n.name : ""), Theme.C(Theme.SUCCESS));
-            Invalidate();
+            SetFooterHint(null, false);   // 上一次的失败原因清掉
+
+            // 不再"Start 没抛异常就算连上"：等内核真的把 10809 端口监听起来再切系统代理。
+            // hy2 是先握手成功才监听，所以这一步连认证/obfs/TLS 一起验了；内核秒退时立刻报错，
+            // 而不是让用户对着"已连接"却上不了网。
+            int gen; lock (_stateLock) gen = ++_connectGen;
+            int waitMs = n.proto == "hy2" ? 9000 : 3500;
+            string protoTag = n.proto.ToUpper(), nodeName = n.name ?? "";
+            var th = new Thread(() =>
+            {
+                string err;
+                bool ok = Xray.WaitReady(p, 10809, waitMs, out err);
+                bool stale; lock (_stateLock) stale = (gen != _connectGen);
+                if (stale) { Xray.Stop(p); return; }
+                if (!ok)
+                {
+                    Xray.Stop(p);
+                    string why = Xray.Friendly(err);
+                    LogToFile("[CONN] 连接失败：" + why + " | 内核输出: " + err);
+                    Post(() =>
+                    {
+                        _xray = null;
+                        _connected = false;
+                        SetConnButton(false);
+                        SetFooterHint("✕ " + why, true);
+                        SetStatus("连接失败", Theme.C(Theme.DANGER));
+                        Invalidate();
+                    });
+                    return;
+                }
+                try { SetSystemProxy(true, "127.0.0.1:10809"); } catch { }
+                Post(() =>
+                {
+                    _connected = true;
+                    SetConnButton(true);
+                    SetFooterHint(null, false);
+                    ShowTip("已连接 · " + protoTag + (nodeName.Length > 0 ? " · " + nodeName : ""), false);
+                    Invalidate();
+                });
+            });
+            th.IsBackground = true;
+            th.Start();
+            SetStatus("正在连接...", Theme.C(Theme.ACCENT));
+        }
+
+        // UI 线程投递：窗口已销毁时静默丢弃（异步结果可能晚于关闭）
+        private void Post(Action a)
+        {
+            try
+            {
+                if (!IsHandleCreated) return;
+                if (InvokeRequired) BeginInvoke(a);
+                else a();
+            }
+            catch (Exception ex) { LogToFile("[UI] " + ex.Message); }
+        }
+
+        // 状态文案同时照顾导入页（只有提示行，没有状态栏）
+        private void ShowTip(string text, bool danger)
+        {
+            if (_page == 1)
+            {
+                _lblTip.Text = text;
+                _lblTip.ForeColor = danger ? Theme.C(Theme.DANGER) : Theme.C(Theme.SUCCESS);
+            }
+            SetStatus(text, danger ? Theme.C(Theme.DANGER) : Theme.C(Theme.SUCCESS));
+        }
+
+        // 失败原因写在仪表盘底部那行（状态位上只有 116px，塞不下"认证失败，检查密码与 obfs …"）
+        internal const string FOOTER_DEFAULT = "系统代理 · 本地 Socks 10808 / Http 10809";
+        private void SetFooterHint(string text, bool danger)
+        {
+            if (_lblFooter == null) return;
+            _lblFooter.Text = text ?? FOOTER_DEFAULT;
+            _lblFooter.ForeColor = danger ? Theme.C(Theme.DANGER) : Theme.C(Theme.FAINT);
         }
 
         private void StopProxy()
         {
+            lock (_stateLock) _connectGen++;   // 作废还没回来的就绪检查
             Xray.Stop(_xray);
             _xray = null;
             SetSystemProxy(false, "");
             _connected = false;
             _lastUp = _lastDown = _speedUp = _speedDown = 0;
             SetConnButton(false);
+            SetFooterHint(null, false);
             SetStatus("未连接", Theme.C(Theme.IDLE));
             Invalidate();
         }
