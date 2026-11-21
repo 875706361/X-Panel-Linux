@@ -101,14 +101,36 @@ namespace XPanelWin
                 Color bc = _editFocused ? Theme.C(Theme.ACCENT) : Theme.C(Theme.INPUT_B);
                 using (var p = new Pen(bc, 1)) g.DrawPath(p, path);
             }
-            // 协议徽标行：输入框下方居中五个协议名，浅灰大写
-            string protos = "VLESS   VMESS   TROJAN   SS   HY2";
+            // 协议徽标行：输入框下方居中五个协议名；解析出当前协议则高亮那一个，
+            // 让「到底识别成什么协议」有个视觉反馈（原来五个永远是同一档浅灰）。
+            string[] protos = { "VLESS", "VMESS", "TROJAN", "SS", "HY2" };
+            string cur = "";
+            try
+            {
+                var n = LinkParser.Parse(_edit.Text ?? "");
+                if (n != null) cur = n.proto.ToUpperInvariant();
+            }
+            catch { }
+            if (cur == "HYSTERIA2") cur = "HY2";
             using (var f = new Font("Consolas", 8.25f))
             {
-                Size sz = TextRenderer.MeasureText(g, protos, f);
-                TextRenderer.DrawText(g, protos, f,
-                    new Rectangle(S(LM), S(EDIT_Y) + S(EDIT_H) + S(10), S(LCW), sz.Height),
-                    Theme.C(0xB9BEC7), TextFormatFlags.HorizontalCenter | TextFormatFlags.NoPadding);
+                int gap = S(16), py = S(EDIT_Y) + S(EDIT_H) + S(10);
+                var widths = new int[protos.Length];
+                int total = 0;
+                for (int i = 0; i < protos.Length; i++)
+                {
+                    widths[i] = TextRenderer.MeasureText(g, protos[i], f, Size.Empty, TextFormatFlags.NoPadding).Width;
+                    total += widths[i];
+                }
+                total += gap * (protos.Length - 1);
+                int px = S(LM) + (S(LCW) - total) / 2;
+                for (int i = 0; i < protos.Length; i++)
+                {
+                    bool on = cur.Length > 0 && cur == protos[i];
+                    TextRenderer.DrawText(g, protos[i], f, new Rectangle(px, py, widths[i] + 2, S(14)),
+                        on ? Theme.C(Theme.ACCENT) : Theme.C(0xB9BEC7), TextFormatFlags.NoPadding);
+                    px += widths[i] + gap;
+                }
             }
         }
 
@@ -125,7 +147,7 @@ namespace XPanelWin
 
         private void InvalidateInput()
         {
-            Invalidate(new Rectangle(S(LM) - S(8), S(EDIT_Y) - S(8), S(LCW) + S(16), S(EDIT_H) + S(20)));
+            Invalidate(new Rectangle(S(LM) - S(8), S(EDIT_Y) - S(8), S(LCW) + S(16), S(EDIT_H) + S(34)));
         }
 
         // page2：仪表盘卡片 + 分割线 + 状态指示点

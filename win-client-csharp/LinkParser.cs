@@ -32,6 +32,17 @@ namespace XPanelWin
             return null;
         }
 
+        // 只取域名/IP（自动更新拼镜像地址用）：解析失败返回空串，不抛。
+        internal static string HostOf(string raw)
+        {
+            try
+            {
+                var n = Parse(raw);
+                return n != null ? (n.address ?? "") : "";
+            }
+            catch { return ""; }
+        }
+
         private static NodeInfo ParseOne(string raw)
         {
             if (raw.StartsWith("vless://")) return ParseVless(raw);

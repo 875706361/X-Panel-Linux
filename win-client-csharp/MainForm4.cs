@@ -478,6 +478,71 @@ namespace XPanelWin
             return "到期: " + t.ToLocalTime().ToString("yyyy/MM/dd") + " (" + days + "天)";
         }
 
+        // ---------- 检查更新 ----------
+
+        // 当前节点的域名：自动更新拼镜像候选地址用（与流量轮询同一套候选）。
+        private string NodeHost()
+        {
+            try
+            {
+                if (_node != null && !string.IsNullOrEmpty(_node.address)) return _node.address;
+                return LinkParser.HostOf(_edit.Text);
+            }
+            catch { return ""; }
+        }
+
+        internal static MainForm Instance;
+
+        // 给「发现新版本」这类状态一个固定落点：底部速率栏每 2 秒被轮询重写，写那里会立刻消失。
+        internal static void SetUpdateHint(string s)
+        {
+            var f = Instance;
+            if (f == null) return;
+            try { f.SetText(f._lblUpdate, s); } catch { }
+        }
+
+        private void HandleCheckUpdate()
+        {
+            string old = _btnCheck.Text;
+            _btnCheck.Enabled = false;
+            _btnCheck.Text = "检查中…";
+            Task.Run(() =>
+            {
+                string msg;
+                Updater.State st = Updater.CheckNow(_panelBase, NodeHost, out msg);
+                try
+                {
+                    BeginInvoke(new Action(() =>
+                    {
+                        _btnCheck.Text = old;
+                        _btnCheck.Enabled = true;
+                        if (st == Updater.State.Found)
+                        {
+                            var r = MessageBox.Show("发现新版本 " + Updater.LatestVersion + "，立即下载并重启客户端？",
+                                "检查更新", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                            if (r == DialogResult.Yes)
+                            {
+                                _lblVer3.Text = "正在下载 " + Updater.LatestVersion + "…";
+                                Task.Run(() =>
+                                {
+                                    string m2;
+                                    Updater.State s2 = Updater.Install(_panelBase, NodeHost, out m2);
+                                    try { BeginInvoke(new Action(() => _lblVer3.Text = "更新失败: " + m2)); } catch { }
+                                });
+                            }
+                        }
+                        else
+                        {
+                            _lblVer3.Text = "当前版本 " + VER + " · " + msg;
+                            if (st == Updater.State.Failed)
+                                MessageBox.Show(msg, "检查更新失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
+                    }));
+                }
+                catch { }
+            });
+        }
+
         private void SetExpireLabel(string text, Color color)
         {
             try

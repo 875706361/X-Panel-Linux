@@ -56,7 +56,7 @@ namespace XPanelWin
             Controls.Add(_edit);
             _edit.SetBounds(S(LM) + 1, S(EDIT_Y) + 1, S(LCW) - 2, S(EDIT_H) - 2);
 
-            _edit.TextChanged += (s, e) => { if (_lblTip.Text != "") _lblTip.Text = ""; };
+            _edit.TextChanged += (s, e) => { if (_lblTip.Text != "") _lblTip.Text = ""; InvalidateInput(); };
             _edit.Enter += (s, e) => { _editFocused = true; InvalidateInput(); };
             _edit.Leave += (s, e) => { _editFocused = false; InvalidateInput(); };
 
@@ -65,7 +65,12 @@ namespace XPanelWin
 
             _lblTip = MkLabel("", LM, TIP_Y, LCW, TIP_H, FSub, Theme.C(Theme.DANGER));
 
-            _page1.AddRange(new Control[] { _lblTitle1, _lblSub1, _edit, _btnLogin, _lblTip });
+            // 导入页底部说明：占住原来一大块空白，也顺带解释「下次启动不用再贴一遍」。
+            _lblNote1 = MkLabel("链接只保存在本机注册表，不会上传；已保存后启动直接进入仪表盘",
+                LM, 396, LCW, 20, FSub, Theme.C(Theme.FAINT));
+            _lblNote1.TextAlign = ContentAlignment.MiddleCenter;
+
+            _page1.AddRange(new Control[] { _lblTitle1, _lblSub1, _edit, _btnLogin, _lblTip, _lblNote1 });
         }
 
         // page2：状态 / 到期 / 累计流量 / 上下载 / 启动加速 / 更换节点
@@ -97,6 +102,10 @@ namespace XPanelWin
             _btnSettings = MkButton("设置", LM + LCW - 64, FOOTER_Y - 2, 64, 24);
             _btnSettings.Click += (s, e) => SwitchPage(3);
 
+            // 更新提示单独占一行：底部状态栏每 2 秒被轮询改写，挂在那里等于立刻被抹掉。
+            _lblUpdate = MkLabel("", LM, FOOTER_Y + 24, LCW, 18, FSub, Theme.C(Theme.ACCENT));
+            _lblUpdate.TextAlign = ContentAlignment.MiddleCenter;
+
             // 模式分段：卡片内底部两枚并排，各占半宽减 4px 中缝
             int half = (LXW - 8) / 2;
             _btnModeBypass = MkButton("绕过大陆", LX0, MODE_Y, half, MODE_H);
@@ -109,7 +118,7 @@ namespace XPanelWin
             _page2.AddRange(new Control[] {
                 _lblStatus, _lblExpire, _lblTotal, _lblTraffic,
                 _lblUpLbl, _lblUp, _lblDownLbl, _lblDown,
-                _btnConn, _btnSwitch, _lblFooter, _btnSettings,
+                _btnConn, _btnSwitch, _lblFooter, _btnSettings, _lblUpdate,
                 _btnModeBypass, _btnModeGlobal
             });
         }
@@ -118,16 +127,27 @@ namespace XPanelWin
         private void BuildPage3()
         {
             _lblTitle3 = MkLabel("设置", LM, P1TITLE_Y, LCW, P1TITLE_H, FTitle, Theme.C(Theme.TXT));
-            _lblSetSocks = MkLabel("Socks5 代理\n127.0.0.1:10808（支持 UDP）", LX0, 120, LXW, 64, FStat, Theme.C(Theme.TXT));
-            _lblSetHttp = MkLabel("Http 代理\n127.0.0.1:10809", LX0, 200, LXW, 64, FStat, Theme.C(Theme.TXT));
-            _lblSetHint = MkLabel("在支持代理的软件中手动填写以上地址即可使用，需处于已连接状态。", LX0, 276, LXW, 40, FSub, Theme.C(Theme.FAINT));
-            
-            _btnReset = MkButton("重置全部设置", LM, BTN2_Y, LCW, BTN2_H);
+            _lblSetSocks = MkLabel("Socks5 代理\n127.0.0.1:10808（支持 UDP）", LX0, 110, LXW, 64, FStat, Theme.C(Theme.TXT));
+            _lblSetHttp = MkLabel("Http 代理\n127.0.0.1:10809", LX0, 180, LXW, 64, FStat, Theme.C(Theme.TXT));
+            _lblSetHint = MkLabel("在支持代理的软件中手动填写以上地址即可使用，需处于已连接状态。", LX0, 246, LXW, 36, FSub, Theme.C(Theme.FAINT));
+
+            // 检查更新：发现新版先弹确认再装，避免像自动更新那样直接退出重启。
+            _btnCheck = MkButton("检查更新", LM, 292, LCW, 44);
+            _btnCheck.Click += (s, e) => HandleCheckUpdate();
+
+            _btnReset = MkButton("重置全部设置", LM, 346, LCW, 44);
             _btnReset.Click += (s, e) => HandleReset();
 
-            _btnBack = MkButton("返回", LM, BTN3_Y, LCW, BTN3_H);
+            _btnBack = MkButton("返回", LM, 400, LCW, 44);
             _btnBack.Click += (s, e) => SwitchPage(2);
-            _page3.AddRange(new Control[] { _lblTitle3, _lblSetSocks, _lblSetHttp, _lblSetHint, _btnReset, _btnBack });
+
+            _lblVer3 = MkLabel("当前版本 " + VER, LM, 462, LCW, 20, FSub, Theme.C(Theme.FAINT));
+            _lblVer3.TextAlign = ContentAlignment.MiddleCenter;
+
+            _page3.AddRange(new Control[] {
+                _lblTitle3, _lblSetSocks, _lblSetHttp, _lblSetHint,
+                _btnCheck, _btnReset, _btnBack, _lblVer3
+            });
         }
 
         // 模式切换：运行中即时生效（重建配置拉起新内核），状态持久化到注册表
@@ -217,6 +237,9 @@ namespace XPanelWin
             _btnSettings.SetColors(Theme.C(0xF4F5F8), Theme.C(0xECEDF1),
                                    Theme.C(0xE2E4E9), Theme.C(0xD0D5DD), Theme.C(0x5F5F5F));
             _btnSettings.Font = FSub;
+            _btnCheck.SetColors(Theme.C(0xF4F5F8), Theme.C(0xECEDF1),
+                                Theme.C(0xE2E4E9), Theme.C(0xD0D5DD), Theme.C(0x2B2B2B));
+            _btnCheck.Font = FStat;
         }
 
         private void SwitchPage(int p)
@@ -238,7 +261,12 @@ namespace XPanelWin
                     if (k != null)
                     {
                         string s = (string)k.GetValue("link", "");
-                        if (!string.IsNullOrEmpty(s)) _edit.Text = s;
+                        if (!string.IsNullOrEmpty(s))
+                        {
+                            _edit.Text = s;
+                            // 不要把整条链接默认全选（蓝底一片，还容易误删）：光标落到末尾即可。
+                            try { _edit.SelectionStart = _edit.TextLength; _edit.SelectionLength = 0; } catch { }
+                        }
                     }
                 }
             }

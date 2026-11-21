@@ -154,8 +154,33 @@ internal static class ExpiryTests {
 
         CheckHardTimeout();
         CheckUpdateVersionGuard();
+        CheckManifestBases();
+        CheckHostOf();
 
         Console.WriteLine("Failures: " + failures);
         return failures == 0 ? 0 : 1;
+    }
+
+    // 自动更新的镜像候选：上次命中优先，节点域名兜底，内置面板最后，且不重复。
+    static void CheckManifestBases() {
+        var bases = Updater.ManifestBases("node.example.com", "https://panel.example.com:1111/clay");
+        CheckEquals("manifest base prefers last hit", bases[0], "https://panel.example.com:1111/clay");
+        if (Array.IndexOf(bases, "https://node.example.com:1111/clay") < 0) {
+            failures++; Console.WriteLine("FAIL manifest base missing node candidate");
+        } else Console.WriteLine("PASS manifest base has node candidate");
+        if (Array.IndexOf(bases, MainForm.PANEL_BASE) < 0) {
+            failures++; Console.WriteLine("FAIL manifest base missing built-in panel");
+        } else Console.WriteLine("PASS manifest base has built-in panel");
+        var uniq = new System.Collections.Generic.HashSet<string>(bases);
+        CheckEquals("manifest bases deduped", uniq.Count.ToString(), bases.Length.ToString());
+        // 没有节点域名、也没有上次命中时，至少还有内置面板可用
+        CheckEquals("manifest base falls back to built-in",
+            Updater.ManifestBases("", "")[0], MainForm.PANEL_BASE);
+    }
+
+    static void CheckHostOf() {
+        CheckEquals("host of vless link",
+            LinkParser.HostOf("vless://11111111-2222-3333-4444-555555555555@1.2.3.4:443?encryption=none&security=reality&pbk=aGVsbG93b3JsZA&type=tcp#t"), "1.2.3.4");
+        CheckEquals("host of garbage is empty", LinkParser.HostOf("not a link"), "");
     }
 }}

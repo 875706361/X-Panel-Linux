@@ -47,12 +47,12 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.4.5";
+        internal const string VER = "v10.4.6";
 
         // 圆角两档：控件 8 / 卡片 12（Go v7.2.0 同值）
         internal const int R_CTRL = 8, R_CARD = 12;
 
-        const string PANEL_BASE = "https://888888666.xyz:1111/clay";
+        internal const string PANEL_BASE = "https://888888666.xyz:1111/clay";
         const string REG_KEY = "Software\\XPanel";
 
         internal static float DpiScale = 1f;
@@ -66,16 +66,16 @@ namespace XPanelWin
         private long _lastUp, _lastDown, _speedUp, _speedDown;
         private readonly object _stateLock = new object();
 
-        private TransparentLabel _lblTitle1, _lblSub1, _lblTip;
+        private TransparentLabel _lblTitle1, _lblSub1, _lblTip, _lblNote1;
         private BorderedEdit _edit;
         private bool _editFocused;
         private FlatButton _btnLogin;
 
         private TransparentLabel _lblStatus, _lblExpire, _lblTotal, _lblTraffic;
-        private TransparentLabel _lblUpLbl, _lblUp, _lblDownLbl, _lblDown, _lblFooter;
-        private FlatButton _btnConn, _btnSwitch, _btnSettings, _btnBack, _btnReset;
+        private TransparentLabel _lblUpLbl, _lblUp, _lblDownLbl, _lblDown, _lblFooter, _lblUpdate;
+        private FlatButton _btnConn, _btnSwitch, _btnSettings, _btnBack, _btnReset, _btnCheck;
         // page3 设置页
-        private TransparentLabel _lblTitle3, _lblSetSocks, _lblSetHttp, _lblSetHint;
+        private TransparentLabel _lblTitle3, _lblSetSocks, _lblSetHttp, _lblSetHint, _lblVer3;
         private TransparentLabel _lblSpeed;
         // 模式分段：两枚并排扁平按钮，选中态 accent 描边+浅蓝底
         private FlatButton _btnModeBypass, _btnModeGlobal;
@@ -96,6 +96,7 @@ namespace XPanelWin
 
         public MainForm()
         {
+            Instance = this;
             Text = "客户端";
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterScreen;
@@ -136,14 +137,29 @@ namespace XPanelWin
             LoadSavedLink();
             LoadPanelBase();
             LoadMode();
-            SwitchPage(1);
+            // 有已保存且能解析的节点时直接进仪表盘：老版本每次启动都停在导入页，
+            // 把整条 vless 链接（含 uuid）摊在输入框里，既难看又得再点一次「登录节点」。
+            NodeInfo saved = null;
+            try { saved = LinkParser.Parse(_edit.Text ?? ""); } catch { }
+            if (saved != null)
+            {
+                _node = saved;
+                SwitchPage(2);
+                LogToFile("[INIT] 恢复上次节点 " + saved.proto + " " + saved.address + ":" + saved.port + "，进入仪表盘");
+            }
+            else
+            {
+                SwitchPage(1);
+            }
             BuildTray();
             // 控件句柄就绪后再起轮询：直接在 OnLoad 里 Task.Run 时，跨线程 Invoke 可能落在
             // 句柄创建完成之前抛异常，异常被循环吞掉，界面就永远停在初始文案（"到期: 查询中"）。
             BeginInvoke(new Action(() =>
             {
                 Task.Run(PollTrafficLoop);
-                Task.Run(() => Updater.CheckOnce(PANEL_BASE));
+                // 启动查一次（发现新版直接装），之后每 30 分钟复查。老版本只在 OnLoad 查一次，
+                // 客户端常驻托盘好几天也不会升级。
+                Task.Run(() => Updater.StartAutoLoop(_panelBase, NodeHost));
             }));
 
             LogToFile("[INIT] " + VER + " 启动 窗口=" + S(LWW) + "x" + S(LWH) + " dpi=" + (int)(DpiScale * 96) + " scale=" + DpiScale.ToString("0.00"));
