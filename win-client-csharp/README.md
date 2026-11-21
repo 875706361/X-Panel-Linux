@@ -45,3 +45,27 @@ bash tests/run.sh
   不行再用 `FindWindowW` + `ShowWindow(SW_RESTORE)` 把隐藏的窗口拽出来（这一步连旧版本也能唤醒）；
   两种都失败才按新实例启动 —— 宁可多开一个，也不要「点了图标一片安静」。
 - `ShouldQuitOnClose(page, connected)` 是上面第一条规则的唯一实现，单测直接覆盖。
+
+## 导入页栅格与高分屏（v10.5.1）
+
+- 纵向栅格集中在 `MainForm.cs` 的 `P1*` / `EDIT_*` / `CHIP_*` / `BTN1_*` / `TIP_*` / `DIV1_Y` / `NOTE_Y`
+  常量里，顺序是 标题 → 副标题 → 输入框 → 协议徽标 → 按钮 → 错误提示 → 页脚分隔线 → 页脚说明。
+  `MainForm.CheckPage1Grid()` 把「相邻块至少 4px、页脚不压底栏」做成可单测的判定
+  （`tests/ExpiryTests.cs` 直接调用）——上一版错误提示行与页脚说明就叠了 2px。
+- 输入框白底由窗口自绘，`BorderedEdit` 内缩 10/8/6 作为真正的内边距；空框水印在
+  `WndProc` 收到 `WM_PAINT` 后自绘（叠 Label 会吃掉点击，焦点进不了输入框）。
+- `app.manifest` 声明 `dpiAware=true` + `dpiAwareness=system`，经 `app.rc` 由 windres
+  打包成 `.res` 走 `mcs -win32res`。**必须用 `--output-format=res`**：coff 格式会让
+  mcs 的 IKVM 反射层抛 `BadImageFormatException`（`CS0016 Could not write to file`），
+  而 `-win32manifest` 被静默忽略、不会写 RT_MANIFEST。没有这段清单时，高分屏上进程先按
+  96dpi 画完再被 Windows 整块拉伸，小字看着发虚、像缺了半截。
+- 本地复现缩放：`XPL_DPI=144 mono XPanel.exe`（诊断开关，正式用户不需要设置）。
+
+## 自动更新（`Updater.StartAutoLoop`）
+
+- 启动 1.5 秒后查一次清单（`/download/pkg/client.json`），**前 3 分钟算启动期**：发现比
+  `MainForm.VER` 新的版本号就直接下载、校验 sha256、写替换脚本并退出让脚本换文件重启。
+- 开机头几分钟网络/面板常没就绪，检查失败按 6s → 15s → 35s → 90s 快速补查，
+  不会一次失败就退到 30 分钟节奏；超过启动期只提示不打断（避免正在用时被重启）。
+- 版本号护栏：清单里的版本 ≤ 本机版本一律不动，旧镜像即使 sha 不同也不会把人降级。
+- 提示同时写到仪表盘那行和导入页的提示行——启动更新时用户多半还停在导入页。
