@@ -132,6 +132,15 @@ if [[ -f "$pkg" ]]; then
     if [[ -f "$tmp/x-ui/install.sh" ]]; then cp -f "$tmp/x-ui/install.sh" "$DIR/install.sh"; fi
 fi
 
+# 面板「下载 Windows 客户端」会读的几个副本（见 web/controller/client_download.go）。
+# 它们只有安装时写过一次，不跟着 Release 走；不刷新的话，用户从面板按钮下到的永远是旧包，
+# 而客户端按版本号护栏又不会自我升级。镜像目录现在优先，这里顺手把已有副本对齐。
+for f in /root/win-client-csharp/XPanel.exe /root/XPanel.exe /root/客户端.exe; do
+    if [[ -f "$f" ]]; then
+        cp -f "$DIR/XPanel.exe" "$f" 2>/dev/null || true
+    fi
+done
+
 echo "完成：$DIR"
 ls -lh "$DIR"
 echo
