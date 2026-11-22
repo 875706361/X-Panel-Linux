@@ -54,3 +54,6 @@ x-panel
 win-client-csharp/resources/
 win-client-csharp/.resgz/
 win-client-csharp/app.res
+
+# 本地渲染/截图产物，不入库
+win-client-csharp/*.png

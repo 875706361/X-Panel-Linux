@@ -21,7 +21,7 @@ namespace XPanelWin
                      ControlStyles.SupportsTransparentBackColor, true);
             BackColor = Color.Transparent;
             Cursor = Cursors.Hand;
-            Font = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold);
+            Font = Fonts.Ui(16, FontStyle.Bold);
         }
 
         // 已连接时"启动加速"变"断开连接"的红底危险态
@@ -60,7 +60,6 @@ namespace XPanelWin
             int d = Math.Max(4, MainForm.S(MainForm.R_CTRL));
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TextRenderingHint = TextRenderingHint.AntiAlias;
 
             using (GraphicsPath path = RRect(rc, d))
             {

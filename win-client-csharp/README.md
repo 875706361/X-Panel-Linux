@@ -108,3 +108,31 @@ Linux 上可以用同名 `hysteria.exe` 包装脚本指向 Linux 版 hysteria �
   以及内存列 `"1,234 K"` 一起算命中，进程退出后脚本还在等，表现为「下载完了但没换包」。
   改成 `tasklist /FO CSV` 第二列精确比对。
 - **`timeout /t 1` 在无控制台时直接报错不等待**，循环空转；延时改用 `ping -n 2 127.0.0.1`。
+
+## 字体系统重构（v10.5.4）
+
+旧实现有三处叠加错误，症状都是「高分屏上字小、发虚、被切一半」：
+
+- **双重缩放**。布局坐标全部走 `S()` 手动乘 `DpiScale`，而 Form 保留 WinForms 默认的
+  `AutoScaleMode.Font` —— 125% 缩放下控件被再缩放一次（1.25²），字体只按 DPI 放大 1.25 倍，
+  于是「框大一圈、字没跟上」。现在构造里显式 `AutoScaleMode = None`，布局只有一个缩放源头。
+- **字号单位混用**。原来用 pt（`new Font(Y, 10.5f)`），pt 会按 `Graphics.DpiY` 再乘一次，
+  与 `S()` 的缩放语义重叠；而且 125% 下 14px→17.5px 这样的半像素字号会被 GDI 亚像素缩放，
+  笔画发虚。现在统一到 `Fonts`（`Fonts.cs`）：字号是 **96dpi 逻辑像素**，显式
+  `GraphicsUnit.Pixel`，乘 `DpiScale` 后取整，与布局常量同一坐标系。
+- **字体族没有回退**。写死 `"Microsoft YaHei UI"`，Win7 或精简系统没有这个族时 GDI 逐字回退，
+  中英混排字重/基线/行高全乱。现在 `Fonts` 按
+  `Microsoft YaHei UI → Microsoft YaHei → Segoe UI → Microsoft Sans Serif → WenQuanYi Zen Hei → SimSun`
+  探测系统里真实存在的族；等宽同理（Consolas → Cascadia Mono → Courier New）。
+
+配套的栅格校正（都由 `MainForm.CheckFontLayout()` 守住，`tests/FontTests.cs` 调用）：
+
+- 大数字 36px→30px、槽位 40→42（30×1.35=41，最差行高也装得下）；协议 chips 高 14→16、
+  未选中色 `0xAEB4BF`→`0x8A9099`（原色在浅底上过淡）。
+- chips 文字补 `VerticalCenter`：`NoPadding` 会把文字贴到 rect 顶部。
+- 底部两行（系统代理说明、速率/版本）从 `Transparent` 改为不透明 `BASE` 底色：透明 Label
+  依赖父窗口背景回填，非整数缩放下回填区常错位，mono 下直接露黑底，Windows 上是闪烁/残影。
+- 判定规则不依赖本机字体：行高按「字号 × 1.35」估算（雅黑实测 1.32、宋体 1.18，取最差值）。
+
+自检/回归：`bash tests/run.sh`（`FontTests` 覆盖族解析、行高-槽位、DPI 等比放大），
+`scripts/winforms-shot.sh` 分别跑 96/120/144/192 截图看比例是否一致。

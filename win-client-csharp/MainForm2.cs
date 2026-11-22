@@ -110,6 +110,8 @@ namespace XPanelWin
             };
 
             _lblFooter = MkLabel("系统代理 · 本地 Socks 10808 / Http 10809", LM, FOOTER_Y, LCW - 74, FOOTER_H, FSub, Theme.C(Theme.FAINT));
+            // 同 _lblSpeed：底部条用不透明底色，避免非整数缩放下透明回填错位露黑底。
+            _lblFooter.BackColor = Theme.C(Theme.BASE);
             _btnSettings = MkButton("设置", LM + LCW - 64, FOOTER_Y - 2, 64, 24);
             _btnSettings.Click += (s, e) => SwitchPage(3);
 
@@ -262,6 +264,10 @@ namespace XPanelWin
         private void BuildBottomBar()
         {
             _lblSpeed = MkLabel("↑ 0 B/s  ↓ 0 B/s · 客户端 " + VER, LM, LWH - 27, LCW, 20, FMono, Theme.C(Theme.MUTED));
+            // 底部条直接坐在窗口底色上：用不透明底色而不是 Transparent。
+            // 透明 Label 依赖父窗口背景回填，缩放比例不是整数（125% / 150%）时
+            // 回填区常错位一两像素，mono 上直接露出黑色底（Windows 上则是闪烁/残影）。
+            _lblSpeed.BackColor = Theme.C(Theme.BASE);
         }
 
         // Fluent 按钮样式表：accent 纯色三态（hover/press 单独一档）+ 次级灰

@@ -36,7 +36,7 @@ namespace XPanelWin
         // 输入框白底由窗口自绘，TextBox 本身往里内缩，做出真正的内边距：
         // 之前只内缩 1px，光标和水印紧贴左边框，视觉上像被裁掉半个字。
         const int EDIT_PAD_X = 10, EDIT_PAD_TOP = 8, EDIT_PAD_BOTTOM = 6;
-        const int CHIP_Y = EDIT_Y + EDIT_H + 12, CHIP_H = 14;
+        const int CHIP_Y = EDIT_Y + EDIT_H + 12, CHIP_H = 16;
         const int BTN1_Y = 364, BTN1_H = 48;
         const int TIP_Y = 418, TIP_H = 20;
         const int DIV1_Y = 458;
@@ -65,7 +65,7 @@ namespace XPanelWin
         const int CARD2_Y = 62, CARD2_H = 240;
         const int STATUS_Y = 80, STATUS_H = 24;
         const int TOTAL_Y = 110, TOTAL_H = 18;
-        const int TRAFFIC_Y = 128, TRAFFIC_H = 40;
+        const int TRAFFIC_Y = 128, TRAFFIC_H = 42;
         const int DIV_Y = 186;
         const int COL_LBL_Y = 196, COL_LBL_H = 18;
         const int COL_VAL_Y = 216, COL_VAL_H = 30;
@@ -75,7 +75,43 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.3";
+        internal const string VER = "v10.5.4";
+
+        // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
+        //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
+        //     保证没装雅黑的机器上也不会把字裁掉半截。
+        //  2) 关键文案必须能在一行内放下（Label 不换行，超了直接截断）。
+        // 改字号或栅格后跑 win-client-csharp/tests/run.sh（FontTests 会调它）。
+        internal static string CheckFontLayout()
+        {
+            Fonts.Init(Fonts.Scale);   // 未初始化时切成 1.0，保证宽度测量有字体可用
+            const double MAX_LINE_RATIO = 1.35;
+            string[] names = {
+                "导入页标题 20px", "副标题 13px", "协议 chips 11px", "提示行 13px", "页脚说明 13px",
+                "仪表盘状态 14px", "累计流量 30px", "上传/下载 22px", "模式按钮 14px", "底部速率 11px"
+            };
+            int[] px = { 20, 13, 11, 13, 13, 14, 30, 22, 14, 11 };
+            int[] slots = { P1TITLE_H, P1SUB_H, CHIP_H, TIP_H, NOTE_H, STATUS_H, TRAFFIC_H, COL_VAL_H, MODE_H, 20 };
+            for (int i = 0; i < px.Length; i++)
+            {
+                int need = (int)Math.Ceiling(px[i] * MAX_LINE_RATIO);
+                if (need > slots[i])
+                    return names[i] + " 需要 " + need + "px 高，槽位只有 " + slots[i];
+            }
+            // 关键文案必须能在一行内放下（Label 不会自动换行，超了就截断）
+            try
+            {
+                using (var g = Graphics.FromHwnd(IntPtr.Zero))
+                {
+                    string sub = "粘贴节点链接，支持 vless / vmess / trojan / ss / hy2";
+                    int w = TextRenderer.MeasureText(g, sub, Fonts.Ui(13), new Size(10000, 100),
+                        TextFormatFlags.NoPadding).Width;
+                    if (w > LCW) return "副标题宽度 " + w + " > 内容宽 " + LCW;
+                }
+            }
+            catch { }   // 无图形设备（纯 CI 容器）时跳过宽度检查
+            return "";
+        }
 
         // 圆角两档：控件 8 / 卡片 12（Go v7.2.0 同值）
         internal const int R_CTRL = 8, R_CARD = 12;
@@ -128,6 +164,9 @@ namespace XPanelWin
         public MainForm()
         {
             Instance = this;
+            // 布局的每个坐标都由 S() 手动乘 DpiScale。WinForms 默认 AutoScaleMode.Font 会在
+            // 高 DPI 下再按字体度量缩放一遍控件（框 ×1.5²、字只 ×1.5），这就是「大框小字」的根。
+            AutoScaleMode = AutoScaleMode.None;
             Text = "客户端";
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterScreen;
@@ -204,17 +243,21 @@ namespace XPanelWin
 
         private void BuildFonts()
         {
-            // 字号按 Go v7.2.0 的 px 换算成 pt（x0.75），96dpi 下逐像素等大
-            const string Y = "Microsoft YaHei UI";
-            FAppTitle = new Font(Y, 10.5f, FontStyle.Bold);   // 14px
-            FTitle = new Font(Y, 15f, FontStyle.Bold);        // 20px
-            FSub = new Font(Y, 9.75f);                        // 13px
-            FEdit = new Font(Y, 10.5f);                       // 14px
-            FBtn = new Font(Y, 12f, FontStyle.Bold);          // 16px
-            FStat = new Font(Y, 10.5f, FontStyle.Bold);       // 14px
-            FVal = new Font(Y, 27f, FontStyle.Bold);          // 36px
-            FBig = new Font(Y, 17.25f, FontStyle.Bold);       // 23px
-            FMono = new Font("Consolas", 8.25f);              // 11px
+            // 字号是「96dpi 逻辑像素」，不是 pt：见 Fonts.cs 顶部注释。
+            Fonts.Init(DpiScale);
+            FAppTitle = Fonts.Ui(14, FontStyle.Bold);
+            FTitle = Fonts.Ui(20, FontStyle.Bold);
+            FSub = Fonts.Ui(13);
+            FEdit = Fonts.Ui(14);
+            FBtn = Fonts.Ui(16, FontStyle.Bold);
+            FStat = Fonts.Ui(14, FontStyle.Bold);
+            FVal = Fonts.Ui(30, FontStyle.Bold);   // 累计流量大数字：30px×1.35=41 ≤ TRAFFIC_H(42)
+            FBig = Fonts.Ui(22, FontStyle.Bold);   // 上传/下载，22px 行高 ~26 < COL_VAL_H(30)
+            FMono = Fonts.Mono(11);
+            LogToFile("[FONT] 族=" + Fonts.UiFamily + " 等宽=" + Fonts.MonoFamily +
+                      " scale=" + Fonts.Scale.ToString("0.00") +
+                      " 行高 标题=" + Fonts.LineHeight(FTitle) + " 副=" + Fonts.LineHeight(FSub) +
+                      " 值=" + Fonts.LineHeight(FVal) + " 按钮=" + Fonts.LineHeight(FBtn));
         }
 
         // ---------- 托盘 ----------

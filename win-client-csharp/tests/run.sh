@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-SRC="Program.cs Native.cs Controls.cs LinkParser.cs Xray.cs Updater.cs \
+SRC="Program.cs Native.cs Controls.cs Fonts.cs LinkParser.cs Xray.cs Updater.cs \
      MainForm.cs MainForm2.cs MainForm3.cs MainForm4.cs"
 REFS="-r:System.Windows.Forms.dll -r:System.Drawing.dll \
       -r:/usr/lib/mono/4.5/System.Web.Extensions.dll \
@@ -26,5 +26,9 @@ mono /tmp/xpanel-hy2-tests.exe || rc=1
 # 自动更新链路冒烟（需要网络：直连面板镜像取 client.json）
 build /tmp/xpanel-updater-tests.exe XPanelWin.UpdaterTests tests/UpdaterTests.cs
 mono /tmp/xpanel-updater-tests.exe || rc=1
+
+# 字体系统：字号=逻辑像素、随 DPI 等比放大、装得进槽位
+build /tmp/xpanel-font-tests.exe XPanelWin.FontTests tests/FontTests.cs
+mono /tmp/xpanel-font-tests.exe || rc=1
 
 exit $rc

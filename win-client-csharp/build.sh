@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")"
 
-SRC="Program.cs Native.cs Controls.cs LinkParser.cs Xray.cs Updater.cs MainForm.cs MainForm2.cs MainForm3.cs MainForm4.cs"
+SRC="Program.cs Native.cs Controls.cs Fonts.cs LinkParser.cs Xray.cs Updater.cs MainForm.cs MainForm2.cs MainForm3.cs MainForm4.cs"
 OUT="XPanel.exe"
 WEBEXT="/usr/lib/mono/4.5/System.Web.Extensions.dll"
 GZDIR=".resgz"

@@ -112,8 +112,8 @@ namespace XPanelWin
             }
             catch { }
             if (cur == "HYSTERIA2") cur = "HY2";
-            using (var f = new Font("Consolas", 8.25f))
             {
+                Font f = Fonts.Mono(11);
                 int gap = S(16), py = S(CHIP_Y);
                 var widths = new int[protos.Length];
                 int total = 0;
@@ -127,8 +127,11 @@ namespace XPanelWin
                 for (int i = 0; i < protos.Length; i++)
                 {
                     bool on = cur.Length > 0 && cur == protos[i];
+                    // NoPadding 会把文字贴到 rect 顶部，必须显式 VerticalCenter，
+                    // 否则高 DPI 下 chip 文字比设计基线高 1~2px，和相邻元素看着不齐。
                     TextRenderer.DrawText(g, protos[i], f, new Rectangle(px, py, widths[i] + 2, S(CHIP_H)),
-                        on ? Theme.C(Theme.ACCENT) : Theme.C(0xAEB4BF), TextFormatFlags.NoPadding);
+                        on ? Theme.C(Theme.ACCENT) : Theme.C(0x8A9099),
+                        TextFormatFlags.NoPadding | TextFormatFlags.VerticalCenter);
                     px += widths[i] + gap;
                 }
             }
