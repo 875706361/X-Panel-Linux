@@ -75,7 +75,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.4";
+        internal const string VER = "v10.5.5";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
@@ -198,28 +198,50 @@ namespace XPanelWin
             // Win11 圆角（Go applyRoundCorners 同款）；dwmapi 缺失或 mono 下静默跳过
             try { int pref = 2; Native.DwmSetWindowAttribute(Handle, Native.DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, 4); } catch { }
 
-            BuildFonts();
-            BuildPage1();
-            BuildPage2();
-            BuildPage3();
-            BuildBottomBar();
-            ApplyStyle();
-            LoadSavedLink();
-            LoadPanelBase();
-            LoadMode();
-            // 有已保存且能解析的节点时直接进仪表盘：老版本每次启动都停在导入页，
-            // 把整条 vless 链接（含 uuid）摊在输入框里，既难看又得再点一次「登录节点」。
+            // 构建与恢复分两段：任何一步抛异常都不能让界面停在「三页控件全部可见」的叠页状态
+            // —— 用户看到的就是输入框、启动加速、登录节点、设置标题糊在同一屏。
             NodeInfo saved = null;
-            try { saved = LinkParser.Parse(_edit.Text ?? ""); } catch { }
-            if (saved != null)
+            try
             {
-                _node = saved;
-                SwitchPage(2);
-                LogToFile("[INIT] 恢复上次节点 " + saved.proto + " " + saved.address + ":" + saved.port + "，进入仪表盘");
+                BuildFonts();
+                BuildPage1();
+                BuildPage2();
+                BuildPage3();
+                BuildBottomBar();
+                ApplyStyle();
+                LoadSavedLink();
+                LoadPanelBase();
+                LoadMode();
+                // 有已保存且能解析的节点时直接进仪表盘：老版本每次启动都停在导入页，
+                // 把整条 vless 链接（含 uuid）摊在输入框里，既难看又得再点一次「登录节点」。
+                try { saved = LinkParser.Parse(_edit.Text ?? ""); } catch { }
             }
-            else
+            catch (Exception ex)
             {
-                SwitchPage(1);
+                LogToFile("[INIT] 构建异常: " + ex);
+            }
+            CheckPageLists();
+
+            // 不管上面成没成功，这里都先全部隐藏再显示目标页：叠页只在「切换从未执行」时出现，
+            // 而 SwitchPage 之前控件默认都是可见的。
+            try
+            {
+                HideAllPageControls();
+                if (saved != null)
+                {
+                    _node = saved;
+                    SwitchPage(2);
+                    LogToFile("[INIT] 恢复上次节点 " + saved.proto + " " + saved.address + ":" + saved.port + "，进入仪表盘");
+                }
+                else
+                {
+                    SwitchPage(1);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToFile("[INIT] 切页异常: " + ex);
+                try { HideAllPageControls(); } catch { }
             }
             BuildTray();
             // 控件句柄就绪后再起轮询：直接在 OnLoad 里 Task.Run 时，跨线程 Invoke 可能落在

@@ -21,7 +21,11 @@ namespace XPanelWin
                 Location = new Point(S(x), S(y)),
                 Size = new Size(S(w), S(h)),
                 Font = f,
-                ForeColor = fore
+                ForeColor = fore,
+                // 建出来先藏着，由 SwitchPage 统一显示当前页。
+                // 否则 OnLoad 构建期间窗口已经显示，首帧会把三页控件全画出来（叠页闪一下甚至有
+                // 用户能看到停在那里）；初始化一旦异常，这个状态就永久留下。
+                Visible = false
             };
             Controls.Add(l);
             return l;
@@ -33,7 +37,8 @@ namespace XPanelWin
             {
                 Text = text,
                 Location = new Point(S(x), S(y)),
-                Size = new Size(S(w), S(h))
+                Size = new Size(S(w), S(h)),
+                Visible = false
             };
             Controls.Add(b);
             return b;
@@ -54,6 +59,7 @@ namespace XPanelWin
                 ForeColor = Theme.C(Theme.TXT),
                 BackColor = Color.White,
                 ShortcutsEnabled = true,
+                Visible = false,   // 同 MkLabel：由 SwitchPage 显示，避免首帧叠页
                 // 空框里给一行水印：168px 高的白框什么都不写时，用户会以为控件没渲染出来。
                 Placeholder = "在此粘贴节点链接，例如 vless://uuid@host:port?type=tcp&security=reality"
             };
@@ -268,6 +274,7 @@ namespace XPanelWin
             // 透明 Label 依赖父窗口背景回填，缩放比例不是整数（125% / 150%）时
             // 回填区常错位一两像素，mono 上直接露出黑色底（Windows 上则是闪烁/残影）。
             _lblSpeed.BackColor = Theme.C(Theme.BASE);
+            _lblSpeed.Visible = true;   // 常驻（不在任何分页列表里，开关页都要显示）
         }
 
         // Fluent 按钮样式表：accent 纯色三态（hover/press 单独一档）+ 次级灰
@@ -295,14 +302,81 @@ namespace XPanelWin
             _btnCheck.Font = FStat;
         }
 
+        // 控件归属自检：除了常驻底部栏，每个 page 控件都必须挂在某个分页列表里。
+        // 漏加列表的控件会永远可见（切页时没人隐藏它），是「叠页」最常见的成因。
+        private void CheckPageLists()
+        {
+            try
+            {
+                var listed = new List<Control>();
+                listed.AddRange(_page1);
+                listed.AddRange(_page2);
+                listed.AddRange(_page3);
+                var permanent = new List<Control> { _lblFooter, _btnSettings, _lblSpeed, _lblUpdate };
+                foreach (var f in GetType().GetFields(System.Reflection.BindingFlags.Instance |
+                                                       System.Reflection.BindingFlags.NonPublic))
+                {
+                    var c = f.GetValue(this) as Control;
+                    if (c == null) continue;
+                    // 只看我们自己命名的控件字段；TextBox 基类里的 hscrollbar/vscrollbar 之类不算。
+                    if (!f.Name.StartsWith("_")) continue;
+                    if (permanent.Contains(c) || listed.Contains(c)) continue;
+                    LogToFile("[UI] 控件未归页: " + f.Name + " (" + c.Text + ")");
+                }
+            }
+            catch { }
+        }
+
         private void SwitchPage(int p)
         {
             if (InvokeRequired) { Invoke(new Action<int>(SwitchPage), p); return; }
             _page = p;
-            foreach (var c in _page1) c.Visible = (p == 1);
-            foreach (var c in _page2) c.Visible = (p == 2);
-            foreach (var c in _page3) c.Visible = (p == 3);
+            try
+            {
+                foreach (var c in _page1) c.Visible = (p == 1);
+                foreach (var c in _page2) c.Visible = (p == 2);
+                foreach (var c in _page3) c.Visible = (p == 3);
+            }
+            catch (Exception ex)
+            {
+                // 单个控件设置失败不该让整页切换中断（那会把三页都留在可见状态，直接叠页）。
+                LogToFile("[UI] 切页失败: " + ex.Message);
+                try { HideAllPageControls(); } catch { }
+                foreach (var c in PageList(p)) { try { c.Visible = true; } catch { } }
+            }
+            CheckSinglePage(p);
             Invalidate();
+        }
+
+        private List<Control> PageList(int p)
+        {
+            if (p == 1) return _page1;
+            if (p == 2) return _page2;
+            if (p == 3) return _page3;
+            return new List<Control>();
+        }
+
+        private void HideAllPageControls()
+        {
+            foreach (var c in _page1) c.Visible = false;
+            foreach (var c in _page2) c.Visible = false;
+            foreach (var c in _page3) c.Visible = false;
+        }
+
+        // 叠页自检：任何时刻只应有一页的控件可见。命中就写日志，便于用户回传定位。
+        private void CheckSinglePage(int p)
+        {
+            try
+            {
+                List<Control> want = PageList(p);
+                int visible = 0;
+                foreach (var c in _page1) if (c.Visible) visible++;
+                foreach (var c in _page2) if (c.Visible) visible++;
+                foreach (var c in _page3) if (c.Visible) visible++;
+                if (visible != want.Count)
+                    LogToFile("[UI] 叠页告警: page=" + p + " 期望 " + want.Count + " 个可见，实际 " + visible);
+            }
+            catch { }
         }
 
         private void LoadSavedLink()
