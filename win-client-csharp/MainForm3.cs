@@ -98,7 +98,8 @@ namespace XPanelWin
             using (var path = FlatButton.RRect(er, S(10)))
             {
                 using (var b = new SolidBrush(Color.White)) g.FillPath(b, path);
-                Color bc = _editFocused ? Theme.C(Theme.ACCENT) : Theme.C(Theme.INPUT_B);
+                Color bc = _loginFailed ? Theme.C(Theme.DANGER)
+                          : (_editFocused ? Theme.C(Theme.ACCENT) : Theme.C(Theme.INPUT_B));
                 using (var p = new Pen(bc, 1)) g.DrawPath(p, path);
             }
             // 协议徽标行：输入框下方居中五个协议名；解析出当前协议则高亮那一个，

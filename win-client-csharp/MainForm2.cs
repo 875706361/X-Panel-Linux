@@ -72,14 +72,19 @@ namespace XPanelWin
                 S(LCW) - S(EDIT_PAD_X) * 2,
                 S(EDIT_H) - S(EDIT_PAD_TOP) - S(EDIT_PAD_BOTTOM));
 
-            _edit.TextChanged += (s, e) => { if (_lblTip.Text != "") _lblTip.Text = ""; InvalidateInput(); };
+            _edit.TextChanged += (s, e) =>
+            {
+                if (_lblTip.Text != "") _lblTip.Text = "";
+                _loginFailed = false;
+                InvalidateInput();
+            };
             _edit.Enter += (s, e) => { _editFocused = true; InvalidateInput(); };
             _edit.Leave += (s, e) => { _editFocused = false; InvalidateInput(); };
 
             _btnLogin = MkButton("登录节点", LM, BTN1_Y, LCW, BTN1_H);
             _btnLogin.Click += (s, e) => HandleLogin();
 
-            _lblTip = MkLabel("", LM, TIP_Y, LCW, TIP_H, FSub, Theme.C(Theme.DANGER));
+            _lblTip = MkLabel("", LM, TIP_Y, LCW, TIP_H, Fonts.Ui(13, FontStyle.Bold), Theme.C(Theme.DANGER));
 
             // 导入页页脚：钉在状态栏上方（NOTE_Y），与主体之间用一条细分隔线（DIV1_Y，见 PaintPage1），
             // 这样按钮以下的留白是「排版留白」而不是「没填满」。

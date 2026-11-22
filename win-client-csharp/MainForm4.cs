@@ -21,21 +21,42 @@ namespace XPanelWin
 
         private void HandleLogin()
         {
-            string raw = _edit.Text;
+            // 多行粘贴（带换行/空格）在 LinkParser 里逐行 Trim 处理，这里只去掉首尾空白。
+            string raw = (_edit.Text ?? "").Trim();
             LogToFile("[LOGIN] 开始解析 长度=" + raw.Length);
-            NodeInfo n = LinkParser.Parse(raw);
+            if (raw.Length == 0)
+            {
+                _loginFailed = true;
+                _lblTip.ForeColor = Theme.C(Theme.DANGER);
+                _lblTip.Text = "请先粘贴节点链接，再点「登录节点」";
+                InvalidateInput();
+                return;
+            }
+            NodeInfo n = null;
+            try { n = LinkParser.Parse(raw); }
+            catch (Exception ex) { LogToFile("[LOGIN] 解析异常: " + ex.Message); }
             if (n == null)
             {
-                LogToFile("[LOGIN] 解析失败");
-                _lblTip.Text = "链接格式错误，支持 vless:// vmess:// trojan:// ss:// hy2://";
+                // 提示里带上输入头部：用户说「点了没反应」时，日志和界面都能直接看出喂进去的是什么。
+                _loginFailed = true;
+                string brief = raw.Length > 24 ? raw.Substring(0, 24) + "…" : raw;
+                LogToFile("[LOGIN] 解析失败 内容=" + brief);
+                // 界面只给结论（13px Bold 下 400px 内放得下），片段留在日志里定位。
+                _lblTip.ForeColor = Theme.C(Theme.DANGER);
+                _lblTip.Text = "链接格式错误，支持 vless / vmess / trojan / ss / hy2";
+                InvalidateInput();
                 return;
             }
             LogToFile("[LOGIN] 解析成功 proto=" + n.proto + " " + n.address + ":" + n.port + " 切页");
+            _loginFailed = false;
             _node = n;
             SaveLink(raw);
             _lblTip.Text = "";
             SwitchPage(2);
         }
+
+        // 输入框描边是否进入错误态（登录失败时变红，比一行小字更醒目）
+        internal bool LoginFailed { get { return _loginFailed; } }
 
         // ---------- 重置全部设置 ----------
         private void HandleReset()
@@ -577,7 +598,11 @@ namespace XPanelWin
             {
                 if (f._page == 1 && f._lblTip != null)
                 {
-                    f._lblTip.ForeColor = Theme.C(Theme.ACCENT);
+                    // 这条提示行一栏两用：更新状态（蓝）和登录错误（红）。
+                    // 清空或写普通状态时必须把颜色还原成错误色，否则之后所有错误提示都是蓝的，
+                    // 用户会当成普通说明忽略掉（「点登录没反应」有一部分就是这么来的）。
+                    f._lblTip.ForeColor = (s.Length == 0 || f._loginFailed)
+                        ? Theme.C(Theme.DANGER) : Theme.C(Theme.ACCENT);
                     f.SetText(f._lblTip, s);
                 }
             }
