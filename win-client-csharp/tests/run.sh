@@ -23,4 +23,8 @@ mono /tmp/xpanel-expiry-tests.exe || rc=1
 build /tmp/xpanel-hy2-tests.exe XPanelWin.Hy2Tests tests/Hy2Tests.cs
 mono /tmp/xpanel-hy2-tests.exe || rc=1
 
+# 自动更新链路冒烟（需要网络：直连面板镜像取 client.json）
+build /tmp/xpanel-updater-tests.exe XPanelWin.UpdaterTests tests/UpdaterTests.cs
+mono /tmp/xpanel-updater-tests.exe || rc=1
+
 exit $rc

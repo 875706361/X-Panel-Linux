@@ -117,8 +117,13 @@ namespace XPanelWin
         private static void Run() {
             try {
                 System.Net.ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
-                System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12 | (System.Net.SecurityProtocolType)3072;
             } catch { }
+            // TLS 版本逐个开：不能一次 `Tls12 | (SecurityProtocolType)3072` 赋值。
+            // .NET 4.7 以下的枚举里没有 TLS1.3（3072），整条赋值会抛 NotSupportedException
+            // 被上面的 catch 吞掉，结果连 TLS1.2 都没启用（默认只剩 TLS1.0），
+            // 和面板（Go 默认最低 TLS1.2）握手失败——表现为「检查更新失败 / 到期一直查询中」。
+            try { System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12; } catch { }
+            try { System.Net.ServicePointManager.SecurityProtocol |= (System.Net.SecurityProtocolType)3072; } catch { }
             try { Native.SetProcessDPIAware(); } catch { }
             MainForm.DpiScale = 1f;
             try

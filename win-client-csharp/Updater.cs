@@ -91,6 +91,7 @@ namespace XPanelWin
                     st = state.ToString();
                     MainForm.LogToFile("[UPDATE] 第" + (round + 1) + "次检查(" +
                                        (startup ? "启动期" : "运行期") + "): " + st + " " + msg);
+                    if (startup) ReportStartupOutcome(state, msg);
                     if (state != State.Failed) retry = 0;
                     else if (retry < STARTUP_RETRY_MS.Length - 1) retry++;
                 }
@@ -105,6 +106,31 @@ namespace XPanelWin
                     : 30 * 60 * 1000;
                 Thread.Sleep(wait);
             }
+        }
+
+        // 启动期结果反馈：自动更新一直是「静默」的——连不上和已最新对用户完全一样，
+        // 都表现为「打开软件什么都没发生」。这里把启动期结论写到导入页提示行：
+        // 失败保留在界面（带日志路径，用户能直接反馈），已最新 6 秒后清掉。
+        private static void ReportStartupOutcome(State state, string msg)
+        {
+            try
+            {
+                if (state == State.Failed)
+                {
+                    MainForm.SetUpdateHint("自动更新检查失败：" + msg);
+                    return;
+                }
+                if (state == State.UpToDate)
+                {
+                    MainForm.SetUpdateHint("客户端已是最新 " + MainForm.VER);
+                    ThreadPool.QueueUserWorkItem(_ =>
+                    {
+                        Thread.Sleep(6000);
+                        try { MainForm.SetUpdateHint(""); } catch { }
+                    });
+                }
+            }
+            catch { }
         }
 
         // 手动「检查更新」：只查不装，把结果交回界面。
@@ -196,23 +222,7 @@ namespace XPanelWin
 
                 int pid = Process.GetCurrentProcess().Id;
                 string bat = Path.Combine(Path.GetTempPath(), "xpanel-update-" + pid + ".cmd");
-                string script =
-                    "@echo off\r\n" +
-                    "setlocal\r\n" +
-                    ":wait\r\n" +
-                    "tasklist /FI \"PID eq " + pid + "\" /NH 2>nul | findstr /C:\"" + pid + "\" >nul\r\n" +
-                    "if not errorlevel 1 (\r\n" +
-                    "  timeout /t 1 /nobreak >nul\r\n" +
-                    "  goto wait\r\n" +
-                    ")\r\n" +
-                    "move /y \"" + newExe + "\" \"" + exe + "\" >nul\r\n" +
-                    "if errorlevel 1 (\r\n" +
-                    "  echo update failed > \"%TEMP%\\xpanel-update-error.log\"\r\n" +
-                    "  del \"" + newExe + "\" >nul 2>&1\r\n" +
-                    ") else (\r\n" +
-                    "  start \"\" \"" + exe + "\"\r\n" +
-                    ")\r\n" +
-                    "del \"%~f0\"\r\n";
+                string script = BuildReplaceScript(pid, newExe, exe);
                 File.WriteAllText(bat, script, Encoding.Default);
 
                 MainForm.LogToFile("[UPDATE] 启动替换脚本并退出");
@@ -227,6 +237,36 @@ namespace XPanelWin
                 return State.Downloading;
             }
             finally { Interlocked.Exchange(ref _busy, 0); }
+        }
+
+        // 生成「等本进程退出 → 覆盖 exe → 重启」的替换脚本。抽成独立方法是为了能在测试里
+        // 单独喂给 cmd 跑一遍（for /f 的引号与 ^ 转义很容易写错，错了只会在用户机器上表现为
+        // 「更新失败/卡住」，本地编译期完全看不出来）。
+        internal static string BuildReplaceScript(int pid, string newExe, string exe)
+        {
+            return
+                "@echo off\r\n" +
+                "setlocal\r\n" +
+                ":wait\r\n" +
+                // 用 CSV 输出的第二列精确比对 PID。老的 findstr /C:"<pid>" 是子串匹配：
+                // PID 1234 会把 1234、11234、12340 全算命中（连内存列 "1,234 K" 也可能撞上），
+                // 进程早退出了脚本还在傻等，用户看到的就是「更新了但没反应」。
+                "set \"ALIVE=\"\r\n" +
+                "for /f \"tokens=2 delims=,\" %%a in ('tasklist /FI \"PID eq " + pid + "\" /NH /FO CSV 2^>nul') do set \"ALIVE=%%~a\"\r\n" +
+                "if \"" + pid + "\"==\"%ALIVE%\" (\r\n" +
+                // timeout 在没有可继承的控制台输入时会直接报错退出（不等待），
+                // 那样循环会空转 CPU；ping 只用来延时，任何环境都稳定。
+                "  ping -n 2 127.0.0.1 >nul\r\n" +
+                "  goto wait\r\n" +
+                ")\r\n" +
+                "move /y \"" + newExe + "\" \"" + exe + "\" >nul\r\n" +
+                "if errorlevel 1 (\r\n" +
+                "  echo update failed > \"%TEMP%\\xpanel-update-error.log\"\r\n" +
+                "  del \"" + newExe + "\" >nul 2>&1\r\n" +
+                ") else (\r\n" +
+                "  start \"\" \"" + exe + "\"\r\n" +
+                ")\r\n" +
+                "del \"%~f0\"\r\n";
         }
 
         private static string HttpGet(string url, int timeoutMs)
