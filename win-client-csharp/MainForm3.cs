@@ -233,6 +233,36 @@ namespace XPanelWin
             base.OnMouseUp(e);
         }
 
+        // ---------- 登录按钮兜底（IMessageFilter） ----------
+
+        // FlatButton 是自绘 Control，正常环境 Click 会触发；但确实有 Windows 机器/缩放下
+        // 按钮收不到 WM_LBUTTONUP（用户反馈「点登录节点完全没反应、连红字都没有」）。
+        // 这里在消息层兜底：鼠标抬起时若指针在登录按钮矩形内，直接执行一次 HandleLogin。
+        // Click 与这里共用 _lastLoginHandled 防抖，两个入口只会生效一次。
+        public bool PreFilterMessage(ref Message m)
+        {
+            const int WM_LBUTTONUP = 0x0202;
+            if (m.Msg != WM_LBUTTONUP) return false;
+            try
+            {
+                if (_page != 1 || _btnLogin == null || !_btnLogin.Visible || !_btnLogin.Enabled) return false;
+                if (!_btnLogin.RectangleToScreen(_btnLogin.ClientRectangle).Contains(Cursor.Position)) return false;
+                LogToFile("[UI] 消息过滤器命中登录按钮");
+                if (!LoginRecentlyHandled()) HandleLogin();
+            }
+            catch { }
+            return false;   // 不吞消息，让按钮自己的 Click 也能正常走（防抖会跳过重复）
+        }
+
+        // 返回 true 表示 500ms 内已经处理过，调用方应跳过。
+        internal bool LoginRecentlyHandled()
+        {
+            long now = Environment.TickCount;
+            if (now - _lastLoginHandled < 500) return true;
+            _lastLoginHandled = now;
+            return false;
+        }
+
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool ReleaseCapture();
         [System.Runtime.InteropServices.DllImport("user32.dll")]

@@ -15,7 +15,7 @@ using Microsoft.Win32;
 
 namespace XPanelWin
 {
-    internal partial class MainForm : Form
+    internal partial class MainForm : Form, IMessageFilter
     {
         // 96dpi 逻辑设计稿：与 Go v7.2.0 的栅格一比一（450x560）。
         const int LWW = 450, LWH = 560;
@@ -75,7 +75,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.11";
+        internal const string VER = "v10.5.12";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
@@ -140,6 +140,7 @@ namespace XPanelWin
         private bool _editFocused;
         private bool _loginFailed;   // 登录解析失败：输入框描边转红、提示行加粗
         internal bool _tipIsUpdate;  // 提示行当前显示的是更新状态（可被更新线程改写）
+        private long _lastLoginHandled;   // 登录入口防抖：Click 与消息过滤器只执行一次
         private FlatButton _btnLogin;
 
         private TransparentLabel _lblStatus, _lblExpire, _lblTotal, _lblTraffic;
@@ -182,6 +183,9 @@ namespace XPanelWin
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             MaximizeBox = false;
             MinimizeBox = false;
+            // 登录按钮的兜底：部分 Windows 环境/缩放下 FlatButton 收不到 WM_LBUTTONUP，
+            // 表现为「点登录节点完全没反应」。消息过滤器直接看鼠标位置，命中按钮就执行登录。
+            Application.AddMessageFilter(this);
         }
 
         internal static int S(int v) => (int)Math.Round(v * DpiScale);

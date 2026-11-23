@@ -82,9 +82,19 @@ namespace XPanelWin
             };
             _edit.Enter += (s, e) => { _editFocused = true; InvalidateInput(); };
             _edit.Leave += (s, e) => { _editFocused = false; InvalidateInput(); };
+            // 快捷键兜底：Ctrl+Enter 直接登录（多行输入框里回车只换行）。
+            _edit.KeyDown += (s, e) =>
+            {
+                if (e.Control && (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Return))
+                {
+                    e.SuppressKeyPress = true;
+                    if (!LoginRecentlyHandled()) HandleLogin();
+                }
+            };
 
             _btnLogin = MkButton("登录节点", LM, BTN1_Y, LCW, BTN1_H);
-            _btnLogin.Click += (s, e) => HandleLogin();
+            // 与消息过滤器共用防抖：任何一个入口执行后 500ms 内另一个跳过。
+            _btnLogin.Click += (s, e) => { if (!LoginRecentlyHandled()) HandleLogin(); };
 
             _lblTip = MkLabel("", LM, TIP_Y, LCW, TIP_H, Fonts.Ui(13, FontStyle.Bold), Theme.C(Theme.DANGER));
 
