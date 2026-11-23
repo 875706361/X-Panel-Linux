@@ -453,7 +453,7 @@ namespace XPanelWin
             string escapedId = Uri.EscapeDataString(id);
             Action<string> add = baseUrl =>
             {
-                string u = baseUrl.TrimEnd('/') + "/panel/pub/traffic/" + escapedId;
+                string u = baseUrl.TrimEnd(new char[] { '/' }) + "/panel/pub/traffic/" + escapedId;
                 if (!list.Contains(u)) list.Add(u);
             };
             if (!string.IsNullOrEmpty(host))
@@ -468,7 +468,7 @@ namespace XPanelWin
             add(PANEL_BASE);
             if (!string.IsNullOrEmpty(preferredBase))   // 上次命中的地址排最前，省掉整轮试探
             {
-                string prefer = preferredBase.TrimEnd('/') + "/panel/pub/traffic/" + escapedId;
+                string prefer = preferredBase.TrimEnd(new char[] { '/' }) + "/panel/pub/traffic/" + escapedId;
                 int i = list.IndexOf(prefer);
                 if (i > 0) { list.RemoveAt(i); list.Insert(0, prefer); }
                 if (i < 0) list.Insert(0, prefer);
@@ -541,7 +541,7 @@ namespace XPanelWin
                     if (k != null)
                     {
                         string v = (string)k.GetValue("panel_base", "");
-                        if (!string.IsNullOrEmpty(v)) _panelBase = v.TrimEnd('/');
+                        if (!string.IsNullOrEmpty(v)) _panelBase = v.TrimEnd(new char[] { '/' });
                     }
                 }
             }

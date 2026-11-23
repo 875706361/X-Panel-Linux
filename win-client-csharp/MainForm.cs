@@ -75,7 +75,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.16";
+        internal const string VER = "v10.5.17";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，

@@ -50,7 +50,7 @@ namespace XPanelWin
             Action<string> add = b =>
             {
                 if (string.IsNullOrEmpty(b)) return;
-                string s = b.TrimEnd('/');
+                string s = b.TrimEnd(new char[] { '/' });
                 if (!list.Contains(s)) list.Add(s);
             };
             add(preferredBase);

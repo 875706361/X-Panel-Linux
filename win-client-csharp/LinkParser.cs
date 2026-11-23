@@ -67,7 +67,7 @@ namespace XPanelWin
             int at = s.IndexOf('@');
             string body = at >= 0 ? s.Substring(at + 1) : s.Substring(sep + 3);
             int q = body.IndexOfAny(new[] { '?', '#' });
-            string hostport = (q < 0 ? body : body.Substring(0, q)).Trim().TrimEnd('/');
+            string hostport = (q < 0 ? body : body.Substring(0, q)).Trim().TrimEnd(new char[] { '/' });
             int c = hostport.LastIndexOf(':');
             if (c < 0) return "缺少端口（应为 host:port）";
             int p;
@@ -191,7 +191,7 @@ namespace XPanelWin
                 int h = rest.IndexOf('#', q);
                 query = h < 0 ? rest.Substring(q + 1) : rest.Substring(q + 1, h - q - 1);
             }
-            hostport = hostport.Trim().TrimEnd('/');
+            hostport = hostport.Trim().TrimEnd(new char[] { '/' });
             int c = hostport.LastIndexOf(':');
             if (c < 0) return false;
             address = hostport.Substring(0, c).Trim('[', ']');
