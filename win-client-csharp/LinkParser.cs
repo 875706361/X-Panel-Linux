@@ -24,6 +24,7 @@ namespace XPanelWin
         public static NodeInfo Parse(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return null;
+            raw = Normalize(raw);
             foreach (string line0 in raw.Replace("\r", "\n").Split(new[] { '\n' }))
             {
                 string line = line0.Trim();
@@ -32,6 +33,50 @@ namespace XPanelWin
                 if (n != null) return n;
             }
             return null;
+        }
+
+        // 从网页/聊天软件复制链接时的常见污染：&amp; 实体、零宽字符、BOM、全角冒号/与号。
+        // 这些字符肉眼几乎看不出来，但会让 pbk 的 key 变成 "amp;pbk"，整条链接被判格式错误，
+        // 用户只会看到「链接格式错误」而坚信自己粘的是对的。
+        internal static string Normalize(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "";
+            var sb = new StringBuilder(raw.Length);
+            foreach (char ch in raw)
+            {
+                if (ch == '\uFEFF' || (ch >= '\u200B' && ch <= '\u200D') || ch == '\u2060') continue;
+                if (ch == '\u00A0') { sb.Append(' '); continue; }
+                sb.Append(ch);
+            }
+            string s = sb.ToString()
+                .Replace("&amp;", "&").Replace("&AMP;", "&").Replace("&#38;", "&").Replace("&#x26;", "&")
+                .Replace('：', ':').Replace('＆', '&').Replace('＃', '#').Replace('？', '?').Replace('＝', '=');
+            return s;
+        }
+
+        // 解析失败的原因（给界面用）：只说「格式错误」用户无从下手。
+        internal static string ExplainFailure(string raw)
+        {
+            string s = Normalize(raw ?? "");
+            if (s.Trim().Length == 0) return "请先粘贴节点链接，再点「登录节点」";
+            int sep = s.IndexOf("://");
+            if (sep <= 0) return "缺少协议头（应以 vless:// 等开头）";
+            string scheme = s.Substring(0, sep).Trim().ToLowerInvariant();
+            string[] ok = { "vless", "vmess", "trojan", "ss", "hy2", "hysteria2" };
+            if (Array.IndexOf(ok, scheme) < 0) return "不支持的协议：" + scheme;
+            int at = s.IndexOf('@');
+            string body = at >= 0 ? s.Substring(at + 1) : s.Substring(sep + 3);
+            int q = body.IndexOfAny(new[] { '?', '#' });
+            string hostport = (q < 0 ? body : body.Substring(0, q)).Trim().TrimEnd('/');
+            int c = hostport.LastIndexOf(':');
+            if (c < 0) return "缺少端口（应为 host:port）";
+            int p;
+            if (!int.TryParse(hostport.Substring(c + 1), out p) || p <= 0 || p > 65535)
+                return "端口无效：" + hostport.Substring(c + 1);
+            if ((scheme == "vless" || scheme == "hy2" || scheme == "hysteria2") &&
+                s.IndexOf("pbk=", StringComparison.OrdinalIgnoreCase) < 0)
+                return scheme + " 缺少 pbk（reality 公钥），参数可能被截断";
+            return "链接格式错误，支持 vless / vmess / trojan / ss / hy2";
         }
 
         // 只取域名/IP（自动更新拼镜像地址用）：解析失败返回空串，不抛。

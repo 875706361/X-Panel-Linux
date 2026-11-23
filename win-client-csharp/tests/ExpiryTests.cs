@@ -156,6 +156,7 @@ internal static class ExpiryTests {
         CheckUpdateVersionGuard();
         CheckManifestBases();
         CheckHostOf();
+        CheckNormalize();
         CheckCloseOnImportPage();
         CheckPage1Grid();
 
@@ -184,6 +185,20 @@ internal static class ExpiryTests {
         CheckEquals("host of vless link",
             LinkParser.HostOf("vless://11111111-2222-3333-4444-555555555555@1.2.3.4:443?encryption=none&security=reality&pbk=aGVsbG93b3JsZA&type=tcp#t"), "1.2.3.4");
         CheckEquals("host of garbage is empty", LinkParser.HostOf("not a link"), "");
+    }
+
+    // 网页复制污染：&amp; 实体、零宽字符、全角符号都必须能救回来，否则用户看到「格式错误」
+    // 却坚信链接没错（真实 case：面板网页把 & 输出成 &amp;，pbk 的 key 变成 amp;pbk）。
+    static void CheckNormalize() {
+        var a = LinkParser.Parse("vless://u@h.example:443?type=tcp&amp;security=reality&amp;pbk=abc&amp;sid=01#t");
+        CheckEquals("&amp; escaped link parses", a != null && a.pbk == "abc" ? "ok" : "fail", "ok");
+        var b = LinkParser.Parse("vless://u@h.example:443?type=tcp\u200b&security=reality&pbk=abc&sid=01#t");
+        CheckEquals("zero width space parses", b != null && b.port == "443" ? "ok" : "fail", "ok");
+        var c = LinkParser.Parse("vless://u@h.example：443?type=tcp&security=reality&pbk=abc&sid=01#t");
+        CheckEquals("full width colon parses", c != null && c.port == "443" ? "ok" : "fail", "ok");
+        CheckEquals("explain missing pbk",
+            LinkParser.ExplainFailure("vless://u@h.example:443?type=tcp&security=tls#t"),
+            "vless 缺少 pbk（reality 公钥），参数可能被截断");
     }
 
     // 导入页点叉必须真退出：老版本一律隐藏到托盘，用户以为关了，再点图标被单实例挡掉，

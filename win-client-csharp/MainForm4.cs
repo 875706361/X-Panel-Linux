@@ -41,9 +41,9 @@ namespace XPanelWin
                 {
                     // 提示里带上输入头部：用户说「点了没反应」时，日志和界面都能直接看出喂进去的是什么。
                     string brief = raw.Length > 24 ? raw.Substring(0, 24) + "…" : raw;
-                    LogToFile("[LOGIN] 解析失败 内容=" + brief);
-                    // 界面只给结论（13px Bold 下 400px 内放得下），片段留在日志里定位。
-                    ShowLoginError("链接格式错误，支持 vless / vmess / trojan / ss / hy2");
+                    string why = LinkParser.ExplainFailure(raw);
+                    LogToFile("[LOGIN] 解析失败 原因=" + why + " 内容=" + brief);
+                    ShowLoginError(why);
                     return;
                 }
                 LogToFile("[LOGIN] 解析成功 proto=" + n.proto + " " + n.address + ":" + n.port + " 切页");
