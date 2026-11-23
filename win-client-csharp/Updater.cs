@@ -65,6 +65,10 @@ namespace XPanelWin
                 add("http://" + host + ":1111/clay");
             }
             add(MainForm.PANEL_BASE);
+            // 域名被污染/解析失败时的最后兜底：直连面板 IP 的 443（nginx 反代 /clay）。
+            // 面板 IP 变更时需要同步改这里——放在最后，正常环境永远不会走到。
+            add("https://23.144.20.121/clay");
+            add("https://23.144.20.121:1111/clay");
             return list.ToArray();
         }
 
@@ -73,12 +77,16 @@ namespace XPanelWin
         // （用户在等它自己升级）；超过这个窗口只提示，免得正在用的时候被突然重启。
         // 开机的头两分钟内网络/面板常还没就绪，检查失败要快速补查几次，
         // 否则一次连不上就退到 30 分钟节奏，用户会以为「自动更新根本没生效」。
-        private static readonly TimeSpan STARTUP_WINDOW = TimeSpan.FromMinutes(3);
-        private static readonly int[] STARTUP_RETRY_MS = { 6000, 15000, 35000, 90000 };
+        // 用户明确要求「每次打开先检查更新」：窗口放宽到 10 分钟、重试更密，
+        // 这样开机网络晚就绪也一定能在本次启动内装上。
+        private static readonly TimeSpan STARTUP_WINDOW = TimeSpan.FromMinutes(10);
+        private static readonly int[] STARTUP_RETRY_MS = { 3000, 6000, 10000, 20000, 40000, 60000 };
 
         public static void StartAutoLoop(string preferredBase, Func<string> hostProvider)
         {
-            Thread.Sleep(1500);   // 让窗口先画出来，别和首帧抢启动时间
+            Thread.Sleep(500);   // 让窗口先画出来，别和首帧抢启动时间
+            // 打开即给出「在检查」的可见状态：用户要求每次启动先查更新，静默就等于没查。
+            try { MainForm.SetUpdateHint("正在检查更新…"); } catch { }
             var clock = Stopwatch.StartNew();
             int round = 0, retry = 0;
             while (true)
