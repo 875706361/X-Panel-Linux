@@ -65,21 +65,17 @@ namespace XPanelWin
         private void ShowLoginError(string msg)
         {
             _loginFailed = true;
+            _tipIsUpdate = false;
             _lblTip.ForeColor = Theme.C(Theme.DANGER);
             _lblTip.Text = msg;
             InvalidateInput();
             try
             {
+                // 保持红色直到用户修改输入：1.6 秒的闪烁会被更新提示/重绘吃掉，
+                // 用户看到的就是「点了没反应」。
                 _btnLogin.Text = "链接无效，请检查";
                 _btnLogin.SetColors(Theme.C(Theme.DANGER), Theme.C(Theme.DANGER_H),
                                     Theme.C(Theme.DANGER_H), Theme.C(Theme.DANGER), Color.White);
-                var tm = new System.Windows.Forms.Timer { Interval = 1600 };
-                tm.Tick += (s, e) =>
-                {
-                    tm.Stop(); tm.Dispose();
-                    if (_loginFailed) RestoreLoginButton();
-                };
-                tm.Start();
             }
             catch { }
         }
@@ -639,11 +635,13 @@ namespace XPanelWin
             {
                 if (f._page == 1 && f._lblTip != null)
                 {
-                    // 这条提示行一栏两用：更新状态（蓝）和登录错误（红）。
-                    // 清空或写普通状态时必须把颜色还原成错误色，否则之后所有错误提示都是蓝的，
-                    // 用户会当成普通说明忽略掉（「点登录没反应」有一部分就是这么来的）。
-                    f._lblTip.ForeColor = (s.Length == 0 || f._loginFailed)
-                        ? Theme.C(Theme.DANGER) : Theme.C(Theme.ACCENT);
+                    // 登录错误优先级最高：更新检查每 3–60 秒重试一次，绝不能把红字覆盖成
+                    // 「自动更新检查失败」——那正是用户看到「点登录没反应」的根因。
+                    if (f._loginFailed) return;
+                    // 只允许更新线程覆盖它自己写的文本，别抢用户/登录的提示。
+                    if (!f._tipIsUpdate && s.Length > 0 && f._lblTip.Text.Length > 0) return;
+                    f._tipIsUpdate = s.Length > 0;
+                    f._lblTip.ForeColor = Theme.C(Theme.ACCENT);
                     f.SetText(f._lblTip, s);
                 }
             }

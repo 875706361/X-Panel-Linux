@@ -75,7 +75,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.10";
+        internal const string VER = "v10.5.11";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
@@ -139,6 +139,7 @@ namespace XPanelWin
         private BorderedEdit _edit;
         private bool _editFocused;
         private bool _loginFailed;   // 登录解析失败：输入框描边转红、提示行加粗
+        internal bool _tipIsUpdate;  // 提示行当前显示的是更新状态（可被更新线程改写）
         private FlatButton _btnLogin;
 
         private TransparentLabel _lblStatus, _lblExpire, _lblTotal, _lblTraffic;

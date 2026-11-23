@@ -76,6 +76,8 @@ namespace XPanelWin
             {
                 if (_lblTip.Text != "") _lblTip.Text = "";
                 _loginFailed = false;
+                _tipIsUpdate = false;
+                RestoreLoginButton();   // 用户改了链接，红色「链接无效」立刻恢复
                 InvalidateInput();
             };
             _edit.Enter += (s, e) => { _editFocused = true; InvalidateInput(); };
