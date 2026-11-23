@@ -36,13 +36,24 @@ namespace XPanelWin
         public static void EnsureFiles()
         {
             if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("XPL_KERNEL_DIR"))) return;   // 外部内核目录，不用释放
+            string bin = BinDir;
+            // 快速路径：内核版本与客户端版本绑定，标记一致就直接跳过 84MB 的哈希校验。
+            string verFile = Path.Combine(bin, "kernel.version");
+            try
+            {
+                if (File.Exists(verFile) && File.ReadAllText(verFile).Trim() == MainForm.VER &&
+                    File.Exists(Path.Combine(bin, "xray.exe")) && File.Exists(Path.Combine(bin, "hysteria.exe")))
+                    return;
+            }
+            catch { }
+
             var asm = System.Reflection.Assembly.GetExecutingAssembly();
             foreach (string name in RequiredFiles)
             {
-                string path = Path.Combine(BinDir, name);
+                string path = Path.Combine(bin, name);
                 string resName = "XPanelWin.resources." + name + ".gz";
-                byte[] data;
-                try { data = ReadResource(asm, resName); }
+                byte[] raw;
+                try { raw = Gunzip(ReadResource(asm, resName)); }
                 catch
                 {
                     // 资源里没有（比如只拷了 exe），磁盘上有就用磁盘的
@@ -55,12 +66,14 @@ namespace XPanelWin
                     try
                     {
                         byte[] existing = File.ReadAllBytes(path);
-                        needWrite = existing.Length != data.Length;
+                        // 关键：拿解压后的原始字节比较。之前比的是 gzip 压缩流，长度永远不等，
+                        // 于是每次启动都重写 84MB（用户看到日志里反复「释放 xray.exe」）。
+                        needWrite = existing.Length != raw.Length;
                         if (!needWrite)
                         {
                             using (var a = new System.Security.Cryptography.SHA256Managed())
                             {
-                                byte[] ha = a.ComputeHash(existing), hb = a.ComputeHash(data);
+                                byte[] ha = a.ComputeHash(existing), hb = a.ComputeHash(raw);
                                 for (int i = 0; i < ha.Length; i++)
                                     if (ha[i] != hb[i]) { needWrite = true; break; }
                             }
@@ -70,12 +83,11 @@ namespace XPanelWin
                 }
                 if (needWrite)
                 {
-                    // 资源是 gzip 包装的，这里解出原始字节再落盘
-                    byte[] raw = Gunzip(data);
                     File.WriteAllBytes(path, raw);
                     MainForm.LogToFile($"[XRAY] 释放 {name} ({raw.Length / 1024 / 1024}MB)");
                 }
             }
+            try { File.WriteAllText(verFile, MainForm.VER); } catch { }
         }
 
         // 解压 gzip 资源。GZipStream 只能读一次，所以每次重新构造。

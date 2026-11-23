@@ -193,7 +193,7 @@ namespace XPanelWin
             _btnBack = MkButton("返回", LM, 424, LCW, 40);
             _btnBack.Click += (s, e) => SwitchPage(2);
 
-            _lblVer3 = MkLabel("当前版本 " + VER, LM, 470, LCW, 20, FSub, Theme.C(Theme.FAINT));
+            _lblVer3 = MkLabel("当前版本 " + VER + " · 内核已内置", LM, 470, LCW, 20, FSub, Theme.C(Theme.FAINT));
             _lblVer3.TextAlign = ContentAlignment.MiddleCenter;
 
             _page3.AddRange(new Control[] {
