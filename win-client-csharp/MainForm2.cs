@@ -79,6 +79,7 @@ namespace XPanelWin
                 _tipIsUpdate = false;
                 RestoreLoginButton();   // 用户改了链接，红色「链接无效」立刻恢复
                 InvalidateInput();
+                if (!_suppressAutoLogin) ScheduleAutoLogin();
             };
             _edit.Enter += (s, e) => { _editFocused = true; InvalidateInput(); };
             _edit.Leave += (s, e) => { _editFocused = false; InvalidateInput(); };
@@ -108,11 +109,14 @@ namespace XPanelWin
 
             // 导入页页脚：钉在状态栏上方（NOTE_Y），与主体之间用一条细分隔线（DIV1_Y，见 PaintPage1），
             // 这样按钮以下的留白是「排版留白」而不是「没填满」。
-            _lblNote1 = MkLabel("链接只保存在本机注册表，不会上传；已保存后启动直接进入仪表盘",
-                LM, NOTE_Y, LCW, NOTE_H, FSub, Theme.C(Theme.FAINT));
-            _lblNote1.TextAlign = ContentAlignment.MiddleCenter;
+            _lblNote1 = MkLabel("链接只保存在本机，不会上传",
+                LM, NOTE_Y, LCW - 72, NOTE_H, FSub, Theme.C(Theme.FAINT));
+            _lblNote1.TextAlign = ContentAlignment.MiddleLeft;
+            // 登录按钮点不动时也要能看日志：入口必须放在导入页，不能只在设置页。
+            _btnLog2 = MkButton("运行日志", LM + LCW - 64, NOTE_Y - 1, 64, 22);
+            _btnLog2.Click += (s, e) => ShowLogWindow();
 
-            _page1.AddRange(new Control[] { _lblTitle1, _lblSub1, _edit, _btnLogin, _lblTip, _lblNote1 });
+            _page1.AddRange(new Control[] { _lblTitle1, _lblSub1, _edit, _btnLogin, _lblTip, _lblNote1, _btnLog2 });
         }
 
         // page2：状态 / 到期 / 累计流量 / 上下载 / 启动加速 / 更换节点
@@ -332,6 +336,10 @@ namespace XPanelWin
             _btnLog.SetColors(Theme.C(0xF4F5F8), Theme.C(0xECEDF1),
                               Theme.C(0xE2E4E9), Theme.C(0xD0D5DD), Theme.C(0x2B2B2B));
             _btnLog.Font = FStat;
+            // 导入页右下角的「运行日志」小按钮
+            _btnLog2.SetColors(Theme.C(0xF4F5F8), Theme.C(0xECEDF1),
+                               Theme.C(0xE2E4E9), Theme.C(0xD0D5DD), Theme.C(0x5F5F5F));
+            _btnLog2.Font = FSub;
         }
 
         // 控件归属自检：除了常驻底部栏，每个 page 控件都必须挂在某个分页列表里。
@@ -422,9 +430,16 @@ namespace XPanelWin
                         string s = (string)k.GetValue("link", "");
                         if (!string.IsNullOrEmpty(s))
                         {
-                            _edit.Text = s;
-                            // 不要把整条链接默认全选（蓝底一片，还容易误删）：光标落到末尾即可。
-                            try { _edit.SelectionStart = _edit.TextLength; _edit.SelectionLength = 0; } catch { }
+                            // 启动恢复上一次的链接不应该触发「粘贴自动登录」，否则解析失败会在
+                            // 导入页留下一条红字，用户一打开就看到报错。
+                            _suppressAutoLogin = true;
+                            try
+                            {
+                                _edit.Text = s;
+                                // 不要把整条链接默认全选（蓝底一片，还容易误删）：光标落到末尾即可。
+                                try { _edit.SelectionStart = _edit.TextLength; _edit.SelectionLength = 0; } catch { }
+                            }
+                            finally { _suppressAutoLogin = false; }
                         }
                     }
                 }

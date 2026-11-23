@@ -19,6 +19,40 @@ namespace XPanelWin
     {
         // ---------- 登录 ----------
 
+        // 粘贴完整链接 650ms 后自动登录。用户反馈登录按钮在某些 Windows 环境里点不动
+        // （点击根本进不到控件），这是完全不依赖鼠标坐标的一条路。
+        private void ScheduleAutoLogin()
+        {
+            try
+            {
+                if (_autoLoginTimer == null)
+                {
+                    _autoLoginTimer = new System.Windows.Forms.Timer { Interval = 650 };
+                    _autoLoginTimer.Tick += (s, e) => { _autoLoginTimer.Stop(); TryAutoLogin(); };
+                }
+                _autoLoginTimer.Stop();
+                _autoLoginTimer.Start();
+            }
+            catch { }
+        }
+
+        private void TryAutoLogin()
+        {
+            try
+            {
+                if (_page != 1) return;
+                string t = (_edit.Text ?? "").Trim().ToLowerInvariant();
+                if (t.Length < 24) return;
+                bool looksLikeLink = t.StartsWith("vless://") || t.StartsWith("vmess://") ||
+                                     t.StartsWith("trojan://") || t.StartsWith("ss://") ||
+                                     t.StartsWith("hy2://") || t.StartsWith("hysteria2://");
+                if (!looksLikeLink) return;
+                LogToFile("[LOGIN] 粘贴后自动登录 长度=" + t.Length);
+                if (!LoginRecentlyHandled()) HandleLogin();
+            }
+            catch { }
+        }
+
         private void HandleLogin()
         {
             // 多行粘贴（带换行/空格）在 LinkParser 里逐行 Trim 处理，这里只去掉首尾空白。
