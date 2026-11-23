@@ -23,36 +23,76 @@ namespace XPanelWin
         {
             // 多行粘贴（带换行/空格）在 LinkParser 里逐行 Trim 处理，这里只去掉首尾空白。
             string raw = (_edit.Text ?? "").Trim();
-            LogToFile("[LOGIN] 开始解析 长度=" + raw.Length);
-            if (raw.Length == 0)
+            LogToFile("[LOGIN] 点击登录 page=" + _page + " 长度=" + raw.Length);
+            // 点击瞬间就给出可见反馈：Windows 上解析/切页若被别的消息挤到下一帧，用户会
+            // 认为按钮没反应。DoEvents 强制先把「正在登录…」画出来，再继续。
+            try { _btnLogin.Text = "正在登录…"; Application.DoEvents(); } catch { }
+            try
             {
-                _loginFailed = true;
-                _lblTip.ForeColor = Theme.C(Theme.DANGER);
-                _lblTip.Text = "请先粘贴节点链接，再点「登录节点」";
-                InvalidateInput();
-                return;
+                if (raw.Length == 0)
+                {
+                    ShowLoginError("请先粘贴节点链接，再点「登录节点」");
+                    return;
+                }
+                NodeInfo n = null;
+                try { n = LinkParser.Parse(raw); }
+                catch (Exception ex) { LogToFile("[LOGIN] 解析异常: " + ex.Message); }
+                if (n == null)
+                {
+                    // 提示里带上输入头部：用户说「点了没反应」时，日志和界面都能直接看出喂进去的是什么。
+                    string brief = raw.Length > 24 ? raw.Substring(0, 24) + "…" : raw;
+                    LogToFile("[LOGIN] 解析失败 内容=" + brief);
+                    // 界面只给结论（13px Bold 下 400px 内放得下），片段留在日志里定位。
+                    ShowLoginError("链接格式错误，支持 vless / vmess / trojan / ss / hy2");
+                    return;
+                }
+                LogToFile("[LOGIN] 解析成功 proto=" + n.proto + " " + n.address + ":" + n.port + " 切页");
+                _loginFailed = false;
+                _node = n;
+                SaveLink(raw);
+                _lblTip.Text = "";
+                SwitchPage(2);
             }
-            NodeInfo n = null;
-            try { n = LinkParser.Parse(raw); }
-            catch (Exception ex) { LogToFile("[LOGIN] 解析异常: " + ex.Message); }
-            if (n == null)
+            finally
             {
-                // 提示里带上输入头部：用户说「点了没反应」时，日志和界面都能直接看出喂进去的是什么。
-                _loginFailed = true;
-                string brief = raw.Length > 24 ? raw.Substring(0, 24) + "…" : raw;
-                LogToFile("[LOGIN] 解析失败 内容=" + brief);
-                // 界面只给结论（13px Bold 下 400px 内放得下），片段留在日志里定位。
-                _lblTip.ForeColor = Theme.C(Theme.DANGER);
-                _lblTip.Text = "链接格式错误，支持 vless / vmess / trojan / ss / hy2";
-                InvalidateInput();
-                return;
+                // 失败态由 ShowLoginError 的定时器负责恢复（红底要留一会儿让用户看见）。
+                if (!_loginFailed) RestoreLoginButton();
             }
-            LogToFile("[LOGIN] 解析成功 proto=" + n.proto + " " + n.address + ":" + n.port + " 切页");
-            _loginFailed = false;
-            _node = n;
-            SaveLink(raw);
-            _lblTip.Text = "";
-            SwitchPage(2);
+        }
+
+        // 登录失败：红字 + 红框 + 按钮本身变红并改文案。之前只有一行 13px 小字，用户看不到
+        // 就以为「点登录没反应」——按钮是点击目标，反馈必须出现在按钮上。
+        private void ShowLoginError(string msg)
+        {
+            _loginFailed = true;
+            _lblTip.ForeColor = Theme.C(Theme.DANGER);
+            _lblTip.Text = msg;
+            InvalidateInput();
+            try
+            {
+                _btnLogin.Text = "链接无效，请检查";
+                _btnLogin.SetColors(Theme.C(Theme.DANGER), Theme.C(Theme.DANGER_H),
+                                    Theme.C(Theme.DANGER_H), Theme.C(Theme.DANGER), Color.White);
+                var tm = new System.Windows.Forms.Timer { Interval = 1600 };
+                tm.Tick += (s, e) =>
+                {
+                    tm.Stop(); tm.Dispose();
+                    if (_loginFailed) RestoreLoginButton();
+                };
+                tm.Start();
+            }
+            catch { }
+        }
+
+        private void RestoreLoginButton()
+        {
+            try
+            {
+                _btnLogin.Text = "登录节点";
+                _btnLogin.SetColors(Theme.C(Theme.ACCENT), Theme.C(Theme.ACCENT_H),
+                                    Theme.C(Theme.ACCENT_P), Theme.C(Theme.ACCENT_P), Color.White);
+            }
+            catch { }
         }
 
         // 输入框描边是否进入错误态（登录失败时变红，比一行小字更醒目）
