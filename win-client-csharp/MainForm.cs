@@ -75,7 +75,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.7";
+        internal const string VER = "v10.5.8";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
@@ -123,6 +123,8 @@ namespace XPanelWin
 
         private int _page = 1;
         private bool _connected, _busy;
+        // 自动更新用来决定「运行期能不能装」和「能不能走本地代理拉清单」。
+        internal bool IsConnected { get { return _connected; } }
         // 每次发起/取消连接都自增：异步就绪检查回来时若代数已变，说明用户已经断开或又点了
         // 一次，这次结果必须丢弃，否则会把系统代理又打开。
         private int _connectGen;

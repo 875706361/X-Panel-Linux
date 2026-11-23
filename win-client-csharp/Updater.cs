@@ -56,10 +56,12 @@ namespace XPanelWin
             add(preferredBase);
             if (!string.IsNullOrEmpty(host))
             {
-                add("https://" + host + ":1111/clay");
-                add("https://" + host + ":1111");
+                // 443 优先：面板的 1111 端口在国内经常被干扰/丢包，节点地址的 443 由 nginx
+                // 反代到同一个面板，国内可直连。1111 留在后面兜底（部分中转只开 1111）。
                 add("https://" + host + "/clay");
                 add("https://" + host);
+                add("https://" + host + ":1111/clay");
+                add("https://" + host + ":1111");
                 add("http://" + host + ":1111/clay");
             }
             add(MainForm.PANEL_BASE);
@@ -87,11 +89,18 @@ namespace XPanelWin
                     string host = hostProvider == null ? "" : hostProvider();
                     var bases = ManifestBases(host, preferredBase);
                     bool startup = clock.Elapsed < STARTUP_WINDOW;
-                    var state = Check(bases, startup, out string msg);
+                    bool connected = MainForm.Instance != null && MainForm.Instance.IsConnected;
+                    // 启动期发现即装；运行期只有未连接时才自动装（正在用代理时不打断）。
+                    bool install = startup || !connected;
+                    var state = Check(bases, install, out string msg, connected);
                     st = state.ToString();
                     MainForm.LogToFile("[UPDATE] 第" + (round + 1) + "次检查(" +
                                        (startup ? "启动期" : "运行期") + "): " + st + " " + msg);
                     if (startup) ReportStartupOutcome(state, msg);
+                    // 运行期发现了但不装（用户正在连接）时，必须把提示留在界面上，
+                    // 否则「自动更新」对用户又变成完全静默。
+                    else if (state == State.Found)
+                        MainForm.SetUpdateHint("发现新版本 " + LatestVersion + "，断开连接后自动更新");
                     if (state != State.Failed) retry = 0;
                     else if (retry < STARTUP_RETRY_MS.Length - 1) retry++;
                 }
@@ -137,17 +146,19 @@ namespace XPanelWin
         public static State CheckNow(string preferredBase, Func<string> hostProvider, out string msg)
         {
             string host = hostProvider == null ? "" : hostProvider();
-            return Check(ManifestBases(host, preferredBase), false, out msg);
+            bool connected = MainForm.Instance != null && MainForm.Instance.IsConnected;
+            return Check(ManifestBases(host, preferredBase), false, out msg, connected);
         }
 
         // 手动确认后安装已发现的版本。
         public static State Install(string preferredBase, Func<string> hostProvider, out string msg)
         {
             string host = hostProvider == null ? "" : hostProvider();
-            return Check(ManifestBases(host, preferredBase), true, out msg);
+            bool connected = MainForm.Instance != null && MainForm.Instance.IsConnected;
+            return Check(ManifestBases(host, preferredBase), true, out msg, connected);
         }
 
-        private static State Check(string[] bases, bool install, out string msg)
+        private static State Check(string[] bases, bool install, out string msg, bool online = false)
         {
             msg = "";
             if (Interlocked.Exchange(ref _busy, 1) == 1) { msg = "正在检查中"; return State.Checking; }
@@ -155,12 +166,13 @@ namespace XPanelWin
             {
                 Manifest m = null;
                 string hitBase = null;
+                bool viaProxy = false;
                 string lastErr = "";
                 foreach (var b in bases)
                 {
                     try
                     {
-                        string json = HttpGet(b + "/download/pkg/client.json", META_TIMEOUT_MS);
+                        string json = HttpGet(b + "/download/pkg/client.json", META_TIMEOUT_MS, false);
                         if (string.IsNullOrEmpty(json)) { lastErr = b + " 空响应"; continue; }
                         var parsed = new JavaScriptSerializer().Deserialize<Manifest>(json);
                         if (parsed != null && parsed.windows != null && !string.IsNullOrEmpty(parsed.windows.sha256))
@@ -170,6 +182,26 @@ namespace XPanelWin
                         lastErr = b + " 清单无效";
                     }
                     catch (Exception ex) { lastErr = b + " " + ex.Message; }
+                }
+                // 直连全失败且本地代理在跑（已连接）：再走 127.0.0.1:10809 试一轮。
+                // 面板 1111 在国内常被干扰，但用户连上节点后本地代理是通的。
+                if (m == null && online)
+                {
+                    foreach (var b in bases)
+                    {
+                        try
+                        {
+                            string json = HttpGet(b + "/download/pkg/client.json", META_TIMEOUT_MS, true);
+                            if (string.IsNullOrEmpty(json)) continue;
+                            var parsed = new JavaScriptSerializer().Deserialize<Manifest>(json);
+                            if (parsed != null && parsed.windows != null && !string.IsNullOrEmpty(parsed.windows.sha256))
+                            {
+                                m = parsed; hitBase = b; viaProxy = true; break;
+                            }
+                        }
+                        catch { }
+                    }
+                    if (m != null) lastErr += "（经本地代理）";
                 }
 
                 LastError = "";
@@ -209,7 +241,7 @@ namespace XPanelWin
                 MainForm.LogToFile("[UPDATE] 发现 " + m.windows.version + "，从 " + hitBase + " 下载");
                 MainForm.SetUpdateHint("发现新版本 " + m.windows.version + "，正在更新…");
                 string newExe = Path.Combine(Path.GetTempPath(), "XPanel.new." + Guid.NewGuid().ToString("N") + ".exe");
-                Download(hitBase + "/download/pkg/XPanel.exe", newExe, 300000);
+                Download(hitBase + "/download/pkg/XPanel.exe", newExe, 300000, viaProxy);
 
                 string got = Sha256File(newExe);
                 if (!string.Equals(got, m.windows.sha256, StringComparison.OrdinalIgnoreCase))
@@ -269,7 +301,7 @@ namespace XPanelWin
                 "del \"%~f0\"\r\n";
         }
 
-        private static string HttpGet(string url, int timeoutMs)
+        private static string HttpGet(string url, int timeoutMs, bool viaProxy)
         {
             HttpWebRequest req = null;
             try
@@ -278,7 +310,8 @@ namespace XPanelWin
                 req.Method = "GET";
                 req.Timeout = timeoutMs;
                 req.ReadWriteTimeout = timeoutMs;
-                req.Proxy = null;   // 直连：IE 里残留的系统代理会把面板请求绕到不存在的通道
+                // viaProxy：已连接时走客户端自己的 http 入站（1111 被干扰时的唯一活路）。
+                req.Proxy = viaProxy ? new WebProxy("http://127.0.0.1:10809") : null;
                 req.ServerCertificateValidationCallback = (s, cert, chain, errors) => true;
                 var ar = req.BeginGetResponse(null, null);
                 if (!ar.AsyncWaitHandle.WaitOne(timeoutMs)) throw new TimeoutException("请求超时");
@@ -293,7 +326,7 @@ namespace XPanelWin
             }
         }
 
-        private static void Download(string url, string path, int timeoutMs)
+        private static void Download(string url, string path, int timeoutMs, bool viaProxy)
         {
             HttpWebRequest req = null;
             try
@@ -302,7 +335,7 @@ namespace XPanelWin
                 req.Method = "GET";
                 req.Timeout = timeoutMs;
                 req.ReadWriteTimeout = timeoutMs;
-                req.Proxy = null;
+                req.Proxy = viaProxy ? new WebProxy("http://127.0.0.1:10809") : null;
                 req.ServerCertificateValidationCallback = (s, cert, chain, errors) => true;
                 using (var resp = req.GetResponse())
                 using (var input = resp.GetResponseStream())

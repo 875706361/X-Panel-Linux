@@ -83,10 +83,10 @@ internal static class ExpiryTests {
         // 面板地址探测（节点域名常不等于面板域名，路径也未必在 /clay）
         string[] urls = MainForm.PanelTrafficUrls("node.example.com", "abc", "");
         string[] expected = {
-            "https://node.example.com:1111/clay/panel/pub/traffic/abc",
-            "https://node.example.com:1111/panel/pub/traffic/abc",
             "https://node.example.com/clay/panel/pub/traffic/abc",
             "https://node.example.com/panel/pub/traffic/abc",
+            "https://node.example.com:1111/clay/panel/pub/traffic/abc",
+            "https://node.example.com:1111/panel/pub/traffic/abc",
             "http://node.example.com:1111/clay/panel/pub/traffic/abc",
             "https://888888666.xyz:1111/clay/panel/pub/traffic/abc",
         };

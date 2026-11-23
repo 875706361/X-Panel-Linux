@@ -428,10 +428,11 @@ namespace XPanelWin
             };
             if (!string.IsNullOrEmpty(host))
             {
-                add("https://" + host + ":1111/clay");
-                add("https://" + host + ":1111");
+                // 443 优先，1111 更容易被干扰（更新清单走同一套候选，顺序保持一致）。
                 add("https://" + host + "/clay");
                 add("https://" + host);
+                add("https://" + host + ":1111/clay");
+                add("https://" + host + ":1111");
                 add("http://" + host + ":1111/clay");
             }
             add(PANEL_BASE);
