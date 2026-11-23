@@ -24,7 +24,7 @@ namespace XPanelWin
     {
         internal enum State { Idle, Checking, UpToDate, Found, Downloading, Failed }
 
-        private const int META_TIMEOUT_MS = 8000;
+        private const int META_TIMEOUT_MS = 4000;
 
         private static int _busy;                 // 同一时刻只跑一次检查
         internal static volatile string LatestVersion = "";   // 清单里比本机新的版本号
@@ -60,14 +60,24 @@ namespace XPanelWin
                 // 反代到同一个面板，国内可直连。1111 留在后面兜底（部分中转只开 1111）。
                 add("https://" + host + "/clay");
                 add("https://" + host);
+                add("http://" + host + "/clay");
                 add("https://" + host + ":1111/clay");
                 add("https://" + host + ":1111");
                 add("http://" + host + ":1111/clay");
             }
+            // 面板自己的域名：443（证书正常）→ 80 → 1111。很多用户能打开面板的 443
+            // 下载页、却卡在 1111 的更新检查上，就是因为候选里没有域名 443 这一项。
+            string panelHost = "";
+            try { panelHost = new Uri(MainForm.PANEL_BASE).Host; } catch { }
+            if (!string.IsNullOrEmpty(panelHost))
+            {
+                add("https://" + panelHost + "/clay");
+                add("http://" + panelHost + "/clay");
+            }
             add(MainForm.PANEL_BASE);
-            // 域名被污染/解析失败时的最后兜底：直连面板 IP 的 443（nginx 反代 /clay）。
-            // 面板 IP 变更时需要同步改这里——放在最后，正常环境永远不会走到。
+            // 域名被污染/解析失败时的最后兜底：直连面板 IP。
             add("https://23.144.20.121/clay");
+            add("http://23.144.20.121/clay");
             add("https://23.144.20.121:1111/clay");
             return list.ToArray();
         }
@@ -96,6 +106,8 @@ namespace XPanelWin
                 {
                     string host = hostProvider == null ? "" : hostProvider();
                     var bases = ManifestBases(host, preferredBase);
+                    // 每轮开始都刷新一次提示：让用户看到「确实在查」，失败后紧接着显示原因。
+                    MainForm.SetUpdateHint("正在检查更新…");
                     bool startup = clock.Elapsed < STARTUP_WINDOW;
                     bool connected = MainForm.Instance != null && MainForm.Instance.IsConnected;
                     // 启动期发现即装；运行期只有未连接时才自动装（正在用代理时不打断）。
@@ -134,7 +146,8 @@ namespace XPanelWin
             {
                 if (state == State.Failed)
                 {
-                    MainForm.SetUpdateHint("自动更新检查失败：" + msg);
+                    string shortMsg = msg.Length > 44 ? msg.Substring(0, 44) + "…" : msg;
+                    MainForm.SetUpdateHint("自动更新检查失败：" + shortMsg + "，稍后自动重试");
                     return;
                 }
                 if (state == State.UpToDate)
@@ -219,6 +232,8 @@ namespace XPanelWin
                     msg = "面板不可达（" + lastErr + "）";
                     return State.Failed;
                 }
+                // 命中哪个地址必须留痕：用户说「一直检查更新」时，靠这行判断是走的 443、80 还是 1111。
+                MainForm.LogToFile("[UPDATE] 清单命中 " + hitBase + (viaProxy ? "（经本地代理）" : ""));
                 if (string.IsNullOrEmpty(m.windows.version))
                 {
                     msg = "清单无版本号，跳过";

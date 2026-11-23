@@ -176,9 +176,9 @@ internal static class ExpiryTests {
         } else Console.WriteLine("PASS manifest base has built-in panel");
         var uniq = new System.Collections.Generic.HashSet<string>(bases);
         CheckEquals("manifest bases deduped", uniq.Count.ToString(), bases.Length.ToString());
-        // 没有节点域名、也没有上次命中时，至少还有内置面板可用
-        CheckEquals("manifest base falls back to built-in",
-            Updater.ManifestBases("", "")[0], MainForm.PANEL_BASE);
+        // 没有节点域名、也没有上次命中时，第一个候选是面板域名的 443（国内最稳）
+        CheckEquals("manifest base falls back to panel 443",
+            Updater.ManifestBases("", "")[0], "https://888888666.xyz/clay");
     }
 
     static void CheckHostOf() {
