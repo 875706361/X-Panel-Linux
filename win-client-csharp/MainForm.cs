@@ -75,7 +75,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.15";
+        internal const string VER = "v10.5.16";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
@@ -264,6 +264,20 @@ namespace XPanelWin
                 // 客户端常驻托盘好几天也不会升级。
                 Task.Run(() => Updater.StartAutoLoop(_panelBase, NodeHost));
             }));
+
+            // 上次替换脚本失败会留下这个文件：提示用户并清掉，避免永远重复同一个失败。
+            try
+            {
+                string err = Path.Combine(Path.GetTempPath(), "xpanel-update-error.log");
+                if (File.Exists(err))
+                {
+                    string info = File.ReadAllText(err).Trim();
+                    File.Delete(err);
+                    LogToFile("[UPDATE] 上次替换失败: " + info);
+                    SetUpdateHint("上次自动更新失败（文件被占用），请在设置里手动检查更新");
+                }
+            }
+            catch { }
 
             LogToFile("[INIT] " + VER + " 启动 窗口=" + S(LWW) + "x" + S(LWH) + " dpi=" + (int)(DpiScale * 96) + " scale=" + DpiScale.ToString("0.00"));
             LogToFile("[BTN_LAYOUT] 栅格规划: 窗口=" + LWW + "x" + LWH + ", 边距LM=" + LM + ", 统一宽度LCW=" + LCW);

@@ -299,28 +299,32 @@ namespace XPanelWin
         // 「更新失败/卡住」，本地编译期完全看不出来）。
         internal static string BuildReplaceScript(int pid, string newExe, string exe)
         {
+            string oldName = "XPanel.old.exe";
             return
                 "@echo off\r\n" +
-                "setlocal\r\n" +
+                "setlocal enabledelayedexpansion\r\n" +
+                "set N=0\r\n" +
                 ":wait\r\n" +
-                // 用 CSV 输出的第二列精确比对 PID。老的 findstr /C:"<pid>" 是子串匹配：
-                // PID 1234 会把 1234、11234、12340 全算命中（连内存列 "1,234 K" 也可能撞上），
-                // 进程早退出了脚本还在傻等，用户看到的就是「更新了但没反应」。
-                "set \"ALIVE=\"\r\n" +
-                "for /f \"tokens=2 delims=,\" %%a in ('tasklist /FI \"PID eq " + pid + "\" /NH /FO CSV 2^>nul') do set \"ALIVE=%%~a\"\r\n" +
-                "if \"" + pid + "\"==\"%ALIVE%\" (\r\n" +
-                // timeout 在没有可继承的控制台输入时会直接报错退出（不等待），
-                // 那样循环会空转 CPU；ping 只用来延时，任何环境都稳定。
+                // 不再用 PID 判断存活：PID 会被系统复用，tasklist 也可能在进程刚退出时仍列出。
+                // 直接尝试把 exe 改名——成功就说明旧进程已释放文件锁，失败就再等。
+                "del \"" + oldName + "\" >nul 2>&1\r\n" +
+                "ren \"" + exe + "\" \"" + oldName + "\" >nul 2>&1\r\n" +
+                "if exist \"" + exe + "\" (\r\n" +
+                "  set /a N+=1\r\n" +
+                "  if !N! GEQ 30 goto fail\r\n" +
                 "  ping -n 2 127.0.0.1 >nul\r\n" +
                 "  goto wait\r\n" +
                 ")\r\n" +
                 "move /y \"" + newExe + "\" \"" + exe + "\" >nul\r\n" +
-                "if errorlevel 1 (\r\n" +
-                "  echo update failed > \"%TEMP%\\xpanel-update-error.log\"\r\n" +
-                "  del \"" + newExe + "\" >nul 2>&1\r\n" +
-                ") else (\r\n" +
-                "  start \"\" \"" + exe + "\"\r\n" +
-                ")\r\n" +
+                "if errorlevel 1 goto fail\r\n" +
+                "del \"" + oldName + "\" >nul 2>&1\r\n" +
+                "start \"\" \"" + exe + "\"\r\n" +
+                "goto done\r\n" +
+                ":fail\r\n" +
+                // 失败留痕：客户端下次启动会读这个文件并把原因写进日志/提示行。
+                "echo update failed %DATE% %TIME% >> \"%TEMP%\\xpanel-update-error.log\"\r\n" +
+                "copy /y \"" + newExe + "\" \"%USERPROFILE%\\Desktop\\XPanel.new.exe\" >nul 2>&1\r\n" +
+                ":done\r\n" +
                 "del \"%~f0\"\r\n";
         }
 
