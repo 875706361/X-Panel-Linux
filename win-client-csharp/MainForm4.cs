@@ -608,6 +608,37 @@ namespace XPanelWin
             return "到期: " + t.ToLocalTime().ToString("yyyy/MM/dd") + " (" + days + "天)";
         }
 
+        // ---------- 运行日志 ----------
+
+        internal static string LogFilePath
+        {
+            get { return Path.Combine(Xray.BinDir, "xpanel.log"); }
+        }
+
+        private void ShowLogWindow()
+        {
+            try
+            {
+                string path = LogFilePath;
+                string text = "";
+                if (File.Exists(path))
+                {
+                    var lines = File.ReadAllLines(path, Encoding.UTF8);
+                    int start = Math.Max(0, lines.Length - 400);
+                    var sb = new StringBuilder();
+                    for (int i = start; i < lines.Length; i++) sb.AppendLine(lines[i]);
+                    text = sb.ToString();
+                }
+                else text = "（日志文件还不存在：" + path + "）";
+                using (var f = new LogForm(text, path)) f.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("读取日志失败：" + ex.Message + "\n\n路径：" + LogFilePath,
+                    "运行日志", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
         // ---------- 检查更新 ----------
 
         // 当前节点的域名：自动更新拼镜像候选地址用（与流量轮询同一套候选）。
@@ -770,6 +801,20 @@ namespace XPanelWin
                 {
                     string dir = Xray.BinDir;
                     string path = Path.Combine(dir, "xpanel.log");
+                    // 长期运行会累积到几百 MB（轮询/点击诊断都写这里），超过 2MB 只保留最后 2000 行。
+                    try
+                    {
+                        var fi = new FileInfo(path);
+                        if (fi.Exists && fi.Length > 2 * 1024 * 1024)
+                        {
+                            string[] all = File.ReadAllLines(path, Encoding.UTF8);
+                            int keep = Math.Min(all.Length, 2000);
+                            var sb = new StringBuilder();
+                            for (int i = all.Length - keep; i < all.Length; i++) sb.AppendLine(all[i]);
+                            File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
+                        }
+                    }
+                    catch { }
                     File.AppendAllText(path,
                         DateTime.Now.ToString("HH:mm:ss.fff") + " " + msg + Environment.NewLine,
                         Encoding.UTF8);

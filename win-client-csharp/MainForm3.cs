@@ -241,7 +241,27 @@ namespace XPanelWin
         // Click 与这里共用 _lastLoginHandled 防抖，两个入口只会生效一次。
         public bool PreFilterMessage(ref Message m)
         {
+            const int WM_LBUTTONDOWN = 0x0201;
             const int WM_LBUTTONUP = 0x0202;
+            // 点击诊断：每次按下/抬起记录屏幕坐标、命中的控件和登录按钮的实际矩形。
+            // 用户说「点了没反应」时，这行日志能直接区分「没点到按钮」和「点了但逻辑没跑」。
+            if (m.Msg == WM_LBUTTONDOWN || m.Msg == WM_LBUTTONUP)
+            {
+                try
+                {
+                    if (_page == 1 && _btnLogin != null)
+                    {
+                        var c = Control.FromHandle(m.HWnd);
+                        Rectangle r = _btnLogin.RectangleToScreen(_btnLogin.ClientRectangle);
+                        LogToFile("[CLICK] " + (m.Msg == WM_LBUTTONDOWN ? "down" : "up") +
+                                  " screen=" + Cursor.Position.X + "," + Cursor.Position.Y +
+                                  " ctrl=" + (c == null ? "<无>" : c.GetType().Name) +
+                                  " loginRect=" + r.X + "," + r.Y + "," + r.Width + "x" + r.Height +
+                                  " visible=" + _btnLogin.Visible + " enabled=" + _btnLogin.Enabled);
+                    }
+                }
+                catch { }
+            }
             if (m.Msg != WM_LBUTTONUP) return false;
             try
             {

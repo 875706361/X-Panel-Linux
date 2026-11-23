@@ -95,6 +95,14 @@ namespace XPanelWin
             _btnLogin = MkButton("登录节点", LM, BTN1_Y, LCW, BTN1_H);
             // 与消息过滤器共用防抖：任何一个入口执行后 500ms 内另一个跳过。
             _btnLogin.Click += (s, e) => { if (!LoginRecentlyHandled()) HandleLogin(); };
+            // 第三条入口：MouseUp 独立于 Click，某些环境里 Control.Click 不触发但 MouseUp 会到。
+            _btnLogin.MouseUp += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Left) return;
+                if (!_btnLogin.ClientRectangle.Contains(e.Location)) return;
+                LogToFile("[UI] 登录按钮 MouseUp 命中");
+                if (!LoginRecentlyHandled()) HandleLogin();
+            };
 
             _lblTip = MkLabel("", LM, TIP_Y, LCW, TIP_H, Fonts.Ui(13, FontStyle.Bold), Theme.C(Theme.DANGER));
 
@@ -168,21 +176,25 @@ namespace XPanelWin
             _lblSetHint = MkLabel("在支持代理的软件中手动填写以上地址即可使用，需处于已连接状态。", LX0, 246, LXW, 36, FSub, Theme.C(Theme.FAINT));
 
             // 检查更新：发现新版先弹确认再装，避免像自动更新那样直接退出重启。
-            _btnCheck = MkButton("检查更新", LM, 292, LCW, 44);
+            _btnCheck = MkButton("检查更新", LM, 286, LCW, 40);
             _btnCheck.Click += (s, e) => HandleCheckUpdate();
 
-            _btnReset = MkButton("重置全部设置", LM, 346, LCW, 44);
+            // 运行日志：用户报「点登录没反应」时直接看最后几行，不用去 %TEMP% 里翻文件。
+            _btnLog = MkButton("查看运行日志", LM, 332, LCW, 40);
+            _btnLog.Click += (s, e) => ShowLogWindow();
+
+            _btnReset = MkButton("重置全部设置", LM, 378, LCW, 40);
             _btnReset.Click += (s, e) => HandleReset();
 
-            _btnBack = MkButton("返回", LM, 400, LCW, 44);
+            _btnBack = MkButton("返回", LM, 424, LCW, 40);
             _btnBack.Click += (s, e) => SwitchPage(2);
 
-            _lblVer3 = MkLabel("当前版本 " + VER, LM, 462, LCW, 20, FSub, Theme.C(Theme.FAINT));
+            _lblVer3 = MkLabel("当前版本 " + VER, LM, 470, LCW, 20, FSub, Theme.C(Theme.FAINT));
             _lblVer3.TextAlign = ContentAlignment.MiddleCenter;
 
             _page3.AddRange(new Control[] {
                 _lblTitle3, _lblSetSocks, _lblSetHttp, _lblSetHint,
-                _btnCheck, _btnReset, _btnBack, _lblVer3
+                _btnCheck, _btnLog, _btnReset, _btnBack, _lblVer3
             });
         }
 
@@ -317,6 +329,9 @@ namespace XPanelWin
             _btnCheck.SetColors(Theme.C(0xF4F5F8), Theme.C(0xECEDF1),
                                 Theme.C(0xE2E4E9), Theme.C(0xD0D5DD), Theme.C(0x2B2B2B));
             _btnCheck.Font = FStat;
+            _btnLog.SetColors(Theme.C(0xF4F5F8), Theme.C(0xECEDF1),
+                              Theme.C(0xE2E4E9), Theme.C(0xD0D5DD), Theme.C(0x2B2B2B));
+            _btnLog.Font = FStat;
         }
 
         // 控件归属自检：除了常驻底部栏，每个 page 控件都必须挂在某个分页列表里。

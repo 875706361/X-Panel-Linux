@@ -75,7 +75,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.13";
+        internal const string VER = "v10.5.14";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
@@ -145,7 +145,7 @@ namespace XPanelWin
 
         private TransparentLabel _lblStatus, _lblExpire, _lblTotal, _lblTraffic;
         private TransparentLabel _lblUpLbl, _lblUp, _lblDownLbl, _lblDown, _lblFooter, _lblUpdate;
-        private FlatButton _btnConn, _btnSwitch, _btnSettings, _btnBack, _btnReset, _btnCheck;
+        private FlatButton _btnConn, _btnSwitch, _btnSettings, _btnBack, _btnReset, _btnCheck, _btnLog;
         // page3 设置页
         private TransparentLabel _lblTitle3, _lblSetSocks, _lblSetHttp, _lblSetHint, _lblVer3;
         private TransparentLabel _lblSpeed;
