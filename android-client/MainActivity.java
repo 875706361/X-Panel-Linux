@@ -195,6 +195,9 @@ public class MainActivity extends Activity {
             log("[init] 客户端版本 " + pi.versionName + " (code " + pi.versionCode + ")");
         } catch (Exception ignored) { }
 
+        // 更新检查的每步结果都打进界面日志区，出问题时用户截图即可定位
+        Updater.setReporter(this::log);
+
         // 启动后检查客户端更新（后台线程，失败静默）
         Updater.checkAsync(this, PANEL_BASE);
     }

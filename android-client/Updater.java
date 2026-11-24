@@ -38,6 +38,20 @@ public final class Updater {
 
     private Updater() {}
 
+    // 更新检查的每一步都回报给界面日志区：只有发现新版才写 logcat 的话，
+    // 「已是最新」「三个地址全失败」这些情况在日志里完全不可见，出问题无从判断。
+    public interface Reporter { void onUpdateLog(String msg); }
+    private static volatile Reporter reporter;
+    public static void setReporter(Reporter r) { reporter = r; }
+
+    private static void report(String msg) {
+        Log.i(TAG, msg);
+        Reporter r = reporter;
+        if (r != null) {
+            try { r.onUpdateLog(msg); } catch (Exception ignored) { }
+        }
+    }
+
     public static void checkAsync(final Context ctx, final String baseUrl) {
         if (started || baseUrl == null || baseUrl.isEmpty()) return;
         started = true;
@@ -50,10 +64,10 @@ public final class Updater {
                 try {
                     if (check(ctx, b)) return;      // 已处理（无需更新或已下载完）
                 } catch (Exception e) {
-                    Log.w(TAG, "check failed on " + b + ": " + e);
+                    report("[update] 检查失败 " + b + ": " + e.getMessage());
                 }
             }
-            Log.w(TAG, "all bases failed");
+            report("[update] 所有地址都不可用");
         }, "xpanel-updater").start();
     }
 
@@ -65,17 +79,19 @@ public final class Updater {
     }
 
     private static boolean check(Context ctx, String base) throws Exception {
+        report("[update] 检查 " + base);
         String json = httpGet(base + "/download/pkg/client.json");
-        if (json == null || json.isEmpty()) return false;
+        if (json == null || json.isEmpty()) { report("[update] 清单为空: " + base); return false; }
         JSONObject root = new JSONObject(json);
         JSONObject a = root.optJSONObject("android");
-        if (a == null) return true;          // 清单正常但没 android 段，换个 base 也没用
+        if (a == null) { report("[update] 清单里没有 android 段"); return true; }
         String want = a.optString("sha256", "");
-        if (want.isEmpty()) return true;
+        if (want.isEmpty()) { report("[update] 清单没有 sha256"); return true; }
 
         String self = sha256(new File(ctx.getPackageCodePath()));
-        if (want.equalsIgnoreCase(self)) return true;   // 已是最新
-        Log.i(TAG, "new apk found, downloading from " + base);
+        report("[update] 清单 sha=" + shortSha(want) + "  本机 sha=" + shortSha(self));
+        if (want.equalsIgnoreCase(self)) { report("[update] 已是最新"); return true; }
+        report("[update] 发现新版本，开始下载");
         toast(ctx, "发现新版本，正在下载…");
 
         DownloadManager dm = (DownloadManager) ctx.getSystemService(Context.DOWNLOAD_SERVICE);
@@ -107,13 +123,14 @@ public final class Updater {
         if (path == null) return false;
 
         if (!want.equalsIgnoreCase(sha256(new File(path)))) {
-            Log.w(TAG, "sha256 mismatch, abort");
+            report("[update] 下载内容校验失败，换地址重试");
             new File(path).delete();
             return false;                      // 内容不对，换下一个 base 重下
         }
+        report("[update] 下载完成，校验通过");
 
         if (rootInstall(path)) {
-            Log.i(TAG, "installed via su");
+            report("[update] root 静默安装成功");
             toast(ctx, "已自动更新到新版本");
             return true;
         }
@@ -162,6 +179,11 @@ public final class Updater {
         r.close();
         c.disconnect();
         return sb.toString();
+    }
+
+    private static String shortSha(String s) {
+        if (s == null || s.length() < 8) return String.valueOf(s);
+        return s.substring(0, 8);
     }
 
     private static String sha256(File f) {
