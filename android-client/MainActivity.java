@@ -185,6 +185,12 @@ public class MainActivity extends Activity {
             }
         }).start();
 
+        // 启动时把当前版本写进日志，自动更新是否真的换成了新包一望即知
+        try {
+            android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+            log("[init] 客户端版本 " + pi.versionName + " (code " + pi.versionCode + ")");
+        } catch (Exception ignored) { }
+
         // 启动后检查客户端更新（后台线程，失败静默）
         Updater.checkAsync(this, PANEL_BASE);
     }
