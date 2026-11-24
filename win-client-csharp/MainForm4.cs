@@ -364,8 +364,7 @@ namespace XPanelWin
 
         private const int POLL_OK_MS = 2000;      // 正常节奏：2 秒一次
         private const int POLL_FAIL_MS = 8000;    // 查不到时退避，避免超时把轮询拖成"永远在查"
-        private const int POLL_TIMEOUT_MS = 5000; // 单个候选的硬超时：轮询经 vless 隧道要在隧道内再做 TLS 握手，
-                                                  // 隧道 RTT 300–800ms 时 2.5s 会卡在抖动区，全候选连续超时
+        private const int POLL_TIMEOUT_MS = 3500; // 单个候选的硬超时；直连跨境约 200–1300ms，留足余量
         private const string LOCAL_HTTP_PROXY = "http://127.0.0.1:10809";
 
         private async Task PollTrafficLoop()
@@ -477,11 +476,15 @@ namespace XPanelWin
             return list.ToArray();
         }
 
-        // 已连接时走本地 http 入站：面板端口（1111）在国内常被干扰，直连必然查不到到期；
-        // 未连接则直连，避免 IE 里残留的代理设置把请求绕到不存在的通道上。
+        // 轮询一律直连，不走本地代理。
+        // 早期实现在已连接时走 127.0.0.1:10809，本意是绕开国内对 1111 的干扰；但面板就在
+        // 代理服务器自己身上，这等于「穿隧道出去再回头访问自己的 443」。实测（v10.5.20~23）：
+        // 隧道能为它建立连接（xray 日志 accepted //panel:443 [http-in >> proxy]），但请求
+        // 到不了 nginx（access.log 里一条都没有），5 秒硬超时也照样不返回；同一时刻别的
+        // 客户端直连该路径是 200/150 字节。清单检查一直是直连，所以从没受这个影响。
         private static IWebProxy PollProxy(bool connected)
         {
-            return connected ? new WebProxy(LOCAL_HTTP_PROXY, false) : null;
+            return null;
         }
 
         // HttpWebRequest.Timeout 管不住 DNS/TCP 连接阶段（SYN 被丢包时能卡几十秒），
