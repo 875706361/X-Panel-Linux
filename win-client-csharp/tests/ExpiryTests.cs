@@ -87,11 +87,15 @@ internal static class ExpiryTests {
             "https://node.example.com/panel/pub/traffic/abc",
             "https://node.example.com:1111/clay/panel/pub/traffic/abc",
             "https://node.example.com:1111/panel/pub/traffic/abc",
-            "http://node.example.com:1111/clay/panel/pub/traffic/abc",
             "https://888888666.xyz:1111/clay/panel/pub/traffic/abc",
         };
         CheckEquals("candidate order", string.Join("|", urls), string.Join("|", expected));
         CheckEquals("no duplicate candidates", urls.Length.ToString(), new System.Collections.Generic.HashSet<string>(urls).Count.ToString());
+        CheckEquals("no plain-http candidate on TLS port 1111",
+            "0",
+            System.Array.FindAll(urls, u => u.StartsWith("http://", System.StringComparison.Ordinal)
+                                            && u.IndexOf(":1111", System.StringComparison.Ordinal) > 0).Length.ToString());
+
         CheckEquals("empty id yields no requests", MainForm.PanelTrafficUrls("h", "", "").Length.ToString(), "0");
         CheckEquals("known base goes first",
             "https://node.example.com:1111/panel/pub/traffic/abc",
@@ -179,6 +183,28 @@ internal static class ExpiryTests {
         // 没有节点域名、也没有上次命中时，第一个候选是面板域名的 443（国内最稳）
         CheckEquals("manifest base falls back to panel 443",
             Updater.ManifestBases("", "")[0], "https://888888666.xyz/clay");
+        // 1111 是 TLS 端口：候选里不能再有明文 http://...:1111，否则每轮白等一个超时
+        CheckEquals("manifest bases drop plain-http on 1111", "0",
+            Array.FindAll(bases, b => b.StartsWith("http://", StringComparison.Ordinal)
+                                      && b.IndexOf(":1111", StringComparison.Ordinal) > 0).Length.ToString());
+        // 运行期记住上次命中的清单地址，下一轮把它提到最前（少试 1–2 个超时候选）
+        var reordered = Updater.PreferBase(new[] { "https://a", "https://b", "https://c" }, "https://c");
+        CheckEquals("prefer base moves hit to front", string.Join("|", reordered), "https://c|https://a|https://b");
+        CheckEquals("prefer base keeps order when absent",
+            string.Join("|", Updater.PreferBase(new[] { "https://a", "https://b" }, "https://zzz")),
+            "https://a|https://b");
+        CheckEquals("prefer base ignores empty hint",
+            string.Join("|", Updater.PreferBase(new[] { "https://a", "https://b" }, "")),
+            "https://a|https://b");
+        // 替换脚本的两条底线：旧文件用绝对路径；失败分支必须还原并启动旧版，
+        // 否则「改名成功 + 覆盖失败」会把用户电脑上的软件直接变没。
+        string sh = Updater.BuildReplaceScript(1, "C:\\tmp\\new.exe", "C:\\app\\XPanel.exe");
+        CheckEquals("replace script uses absolute old path", "true",
+            sh.Contains("del \"C:\\app\\XPanel.old.exe\"") ? "true" : "false");
+        CheckEquals("replace script restores old exe on failure", "true",
+            sh.Contains("if exist \"C:\\app\\XPanel.old.exe\" if not exist \"C:\\app\\XPanel.exe\" ren") ? "true" : "false");
+        CheckEquals("replace script relaunches on failure", "true",
+            sh.Contains("if exist \"C:\\app\\XPanel.exe\" start \"\" \"C:\\app\\XPanel.exe\"") ? "true" : "false");
     }
 
     static void CheckHostOf() {

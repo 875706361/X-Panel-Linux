@@ -463,7 +463,7 @@ namespace XPanelWin
                 add("https://" + host);
                 add("https://" + host + ":1111/clay");
                 add("https://" + host + ":1111");
-                add("http://" + host + ":1111/clay");
+                // 1111 是 TLS 端口，明文 http:// 必被丢弃，只会白等一个 1200ms 超时。
             }
             add(PANEL_BASE);
             if (!string.IsNullOrEmpty(preferredBase))   // 上次命中的地址排最前，省掉整轮试探

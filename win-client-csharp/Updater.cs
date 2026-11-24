@@ -29,6 +29,21 @@ namespace XPanelWin
         private static int _busy;                 // 同一时刻只跑一次检查
         internal static volatile string LatestVersion = "";   // 清单里比本机新的版本号
         internal static volatile string LastError = "";
+        // 上次命中的清单地址：候选里第一个往往是错的（443 在某些线路被干扰），
+        // 记住命中项能让后续每轮检查少试 1–2 个超时候选。
+        private static volatile string _lastHitBase = "";
+
+        // 把上次命中的地址提到最前，其余保持原顺序（纯函数，便于测试）。
+        internal static string[] PreferBase(string[] bases, string preferred)
+        {
+            if (bases == null || bases.Length == 0 || string.IsNullOrEmpty(preferred)) return bases;
+            var list = new List<string>();
+            foreach (var b in bases)
+                if (string.Equals(b, preferred, StringComparison.OrdinalIgnoreCase)) list.Add(b);
+            foreach (var b in bases)
+                if (!string.Equals(b, preferred, StringComparison.OrdinalIgnoreCase)) list.Add(b);
+            return list.ToArray();
+        }
 
         private class ClientFile
         {
@@ -63,7 +78,8 @@ namespace XPanelWin
                 add("http://" + host + "/clay");
                 add("https://" + host + ":1111/clay");
                 add("https://" + host + ":1111");
-                add("http://" + host + ":1111/clay");
+                // 不再试 http://host:1111：面板 1111 是 TLS 端口，明文 HTTP 必被服务端丢弃，
+                // 只会白等一整个超时（用户日志里那条 1200ms "超时" 就是它）。
             }
             // 面板自己的域名：443（证书正常）→ 80 → 1111。很多用户能打开面板的 443
             // 下载页、却卡在 1111 的更新检查上，就是因为候选里没有域名 443 这一项。
@@ -185,6 +201,7 @@ namespace XPanelWin
             if (Interlocked.Exchange(ref _busy, 1) == 1) { msg = "正在检查中"; return State.Checking; }
             try
             {
+                bases = PreferBase(bases, _lastHitBase);
                 Manifest m = null;
                 string hitBase = null;
                 bool viaProxy = false;
@@ -234,6 +251,7 @@ namespace XPanelWin
                 }
                 // 命中哪个地址必须留痕：用户说「一直检查更新」时，靠这行判断是走的 443、80 还是 1111。
                 MainForm.LogToFile("[UPDATE] 清单命中 " + hitBase + (viaProxy ? "（经本地代理）" : ""));
+                _lastHitBase = hitBase;
                 if (string.IsNullOrEmpty(m.windows.version))
                 {
                     msg = "清单无版本号，跳过";
@@ -297,17 +315,28 @@ namespace XPanelWin
         // 生成「等本进程退出 → 覆盖 exe → 重启」的替换脚本。抽成独立方法是为了能在测试里
         // 单独喂给 cmd 跑一遍（for /f 的引号与 ^ 转义很容易写错，错了只会在用户机器上表现为
         // 「更新失败/卡住」，本地编译期完全看不出来）。
+        //
+        // 两条必须守住的底线：
+        //  1) 旧文件一律用绝对路径。cmd 的当前目录默认是 system32，早期版本用相对的
+        //     "XPanel.old.exe"，等于在 system32 里找旧文件，改名分支会误判。
+        //  2) 任何失败分支都要把旧版还原并启动。脚本第一步就是把 XPanel.exe 改名，
+        //     一旦后面覆盖失败却不还原，用户电脑上的软件就凭空消失了。
         internal static string BuildReplaceScript(int pid, string newExe, string exe)
         {
             string oldName = "XPanel.old.exe";
+            int cut = exe.LastIndexOfAny(new char[] { '\\', '/' });   // 不能用 Path.GetDirectoryName：
+            string dir = cut > 0 ? exe.Substring(0, cut) : "";        // 测试里传的是 wine 的 Z:\ 路径，
+            string baseName = cut > 0 ? exe.Substring(cut + 1) : exe; // Linux 上它不认反斜杠。
+            string oldExe = dir.Length == 0 ? oldName : dir + "\\" + oldName;
             return
                 "@echo off\r\n" +
                 "setlocal enabledelayedexpansion\r\n" +
+                (dir.Length == 0 ? "" : "cd /d \"" + dir + "\"\r\n") +
                 "set N=0\r\n" +
                 ":wait\r\n" +
                 // 不再用 PID 判断存活：PID 会被系统复用，tasklist 也可能在进程刚退出时仍列出。
                 // 直接尝试把 exe 改名——成功就说明旧进程已释放文件锁，失败就再等。
-                "del \"" + oldName + "\" >nul 2>&1\r\n" +
+                "del \"" + oldExe + "\" >nul 2>&1\r\n" +
                 "ren \"" + exe + "\" \"" + oldName + "\" >nul 2>&1\r\n" +
                 "if exist \"" + exe + "\" (\r\n" +
                 "  set /a N+=1\r\n" +
@@ -315,14 +344,18 @@ namespace XPanelWin
                 "  ping -n 2 127.0.0.1 >nul\r\n" +
                 "  goto wait\r\n" +
                 ")\r\n" +
-                "move /y \"" + newExe + "\" \"" + exe + "\" >nul\r\n" +
-                "if errorlevel 1 goto fail\r\n" +
-                "del \"" + oldName + "\" >nul 2>&1\r\n" +
+                "copy /y \"" + newExe + "\" \"" + exe + "\" >nul\r\n" +
+                "if not exist \"" + exe + "\" goto fail\r\n" +
+                "del \"" + oldExe + "\" >nul 2>&1\r\n" +
                 "start \"\" \"" + exe + "\"\r\n" +
                 "goto done\r\n" +
                 ":fail\r\n" +
                 // 失败留痕：客户端下次启动会读这个文件并把原因写进日志/提示行。
                 "echo update failed %DATE% %TIME% >> \"%TEMP%\\xpanel-update-error.log\"\r\n" +
+                // 还原旧版（改名成功但覆盖失败时，XPanel.exe 已不存在）。
+                "if exist \"" + oldExe + "\" if not exist \"" + exe + "\" ren \"" + oldExe + "\" \"" + baseName + "\" >nul 2>&1\r\n" +
+                "if exist \"" + oldExe + "\" if not exist \"" + exe + "\" copy /y \"" + oldExe + "\" \"" + exe + "\" >nul 2>&1\r\n" +
+                "if exist \"" + exe + "\" start \"\" \"" + exe + "\"\r\n" +
                 "copy /y \"" + newExe + "\" \"%USERPROFILE%\\Desktop\\XPanel.new.exe\" >nul 2>&1\r\n" +
                 ":done\r\n" +
                 "del \"%~f0\"\r\n";
