@@ -7,11 +7,13 @@ cd "$(dirname "$0")"
 SRC="Program.cs Native.cs Controls.cs Fonts.cs LinkParser.cs Xray.cs Updater.cs LogForm.cs MainForm.cs MainForm2.cs MainForm3.cs MainForm4.cs"
 OUT="XPanel.exe"
 
-# .NET Framework（所有版本）的 String 只有 TrimEnd/TrimStart(params char[])；
-# 单字符重载 TrimEnd(char) 是 mono/Core 才有的，mcs 会绑定到它，用户机器上运行时
-# MissingMethodException（表现为登录解析失败、更新检查失败、LoadPanelBase 构建异常）。
-if grep -rnE "\.Trim(End|Start)\('[^']?'\)" $SRC 2>/dev/null; then
-  echo "ERROR: 单字符 TrimEnd/TrimStart 重载在 .NET Framework 不存在，请改用 TrimEnd(new char[] { ... })" >&2
+# .NET Framework（所有版本）缺少 mono/Core 才有的单参数 char 重载：
+#   TrimEnd(char)、TrimStart(char)、Trim(char)、Split(char)、Contains(char)、
+#   StartsWith(char)、EndsWith(char)  —— mcs 会绑定到这些重载，用户机器上运行时
+# MissingMethodException（登录解析失败/更新检查失败/LoadPanelBase 构建异常）。
+# 统一改成显式 char[]，这里在构建期拦截。
+if grep -rnE "\.(Split|Contains|StartsWith|EndsWith|Trim|TrimStart|TrimEnd)\(\s*'[^',]*'\s*\)" $SRC 2>/dev/null; then
+  echo "ERROR: 上述单参数 char 重载在 .NET Framework 不存在，请改用 Xxx(new char[] { ... })" >&2
   exit 1
 fi
 WEBEXT="/usr/lib/mono/4.5/System.Web.Extensions.dll"

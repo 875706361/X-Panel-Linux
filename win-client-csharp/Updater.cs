@@ -391,7 +391,9 @@ namespace XPanelWin
         {
             var nums = new int[3];
             if (string.IsNullOrEmpty(v)) return nums;
-            string[] parts = v.Trim().TrimStart('v', 'V').Split('.');
+            // Split('.') 在 mono 的 mscorlib 上会绑定到 Core 才有的 Split(char, StringSplitOptions)，
+            // Windows 的 .NET Framework 没有这个重载 → MissingMethodException。必须显式传 char[]。
+            string[] parts = v.Trim().TrimStart(new char[] { 'v', 'V' }).Split(new char[] { '.' });
             for (int i = 0; i < 3 && i < parts.Length; i++)
                 int.TryParse(parts[i], out nums[i]);
             return nums;
