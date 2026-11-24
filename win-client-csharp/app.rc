@@ -3,3 +3,7 @@
 // 图标与 RT_MANIFEST 就都在同一个资源节里。
 1 24 "app.manifest"
 MAINICON ICON "app.ico"
+
+// 版本资源。没有它时 Windows 气泡通知、任务管理器、文件属性里显示的是「XPanel-10.5.20.exe」
+// 这种文件名，用户会以为没升级。version.rc 由 build.sh 按 MainForm.cs 的 VER 生成。
+#include "version.rc"

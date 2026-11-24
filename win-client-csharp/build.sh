@@ -30,6 +30,41 @@ for f in xray.exe geoip.dat geosite.dat hysteria.exe; do
     gzip -9 -c "resources/$f" > "$GZDIR/$f.gz"
 done
 
+# 版本资源：从 MainForm.cs 的 VER 生成 version.rc（app.rc 里 #include 它），
+# 让 Windows 的气泡通知/任务管理器/文件属性显示 "X-Panel" 和真实版本号，而不是 exe 文件名。
+VER=$(sed -n 's/.*VER = "v\([0-9.]*\)".*/\1/p' MainForm.cs | head -1)
+[ -n "$VER" ] || { echo "无法从 MainForm.cs 读取 VER"; exit 1; }
+V1=${VER%%.*}; REST=${VER#*.}; V2=${REST%%.*}; REST2=${REST#*.}; V3=${REST2%%.*}
+cat > version.rc <<EOF
+1 VERSIONINFO
+FILEVERSION $V1,$V2,$V3,0
+PRODUCTVERSION $V1,$V2,$V3,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "X-Panel"
+            VALUE "FileDescription", "X-Panel"
+            VALUE "FileVersion", "$VER"
+            VALUE "InternalName", "XPanel"
+            VALUE "OriginalFilename", "XPanel.exe"
+            VALUE "ProductName", "X-Panel"
+            VALUE "ProductVersion", "$VER"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+EOF
+
 # 资源节：app.res（windres 生成）= 图标 + DPI 清单。
 # 注意必须用 --output-format=res（.res 容器）：coff 格式会让 mcs 的 IKVM 反射层
 # 抛 BadImageFormatException（CS0016 Could not write to file 'XPanel'），

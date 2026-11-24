@@ -75,7 +75,7 @@ namespace XPanelWin
         const int BTN3_Y = 374, BTN3_H = 48;
         const int FOOTER_Y = 440, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.24";
+        internal const string VER = "v10.5.25";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
@@ -390,7 +390,7 @@ namespace XPanelWin
             if (!_trayTipShown)
             {
                 _trayTipShown = true;
-                try { _tray.ShowBalloonTip(2000, "客户端", "程序已最小化到托盘，右下角图标可退出", ToolTipIcon.Info); } catch { }
+                try { _tray.ShowBalloonTip(2500, "X-Panel", "已最小化到托盘，加速仍在运行；右键右下角图标可退出", ToolTipIcon.Info); } catch { }
             }
         }
     }
