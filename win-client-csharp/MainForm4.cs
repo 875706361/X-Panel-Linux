@@ -364,7 +364,7 @@ namespace XPanelWin
 
         private const int POLL_OK_MS = 2000;      // 正常节奏：2 秒一次
         private const int POLL_FAIL_MS = 8000;    // 查不到时退避，避免超时把轮询拖成"永远在查"
-        private const int POLL_TIMEOUT_MS = 1200; // 单个候选的硬超时（含 DNS/TCP 连接阶段）
+        private const int POLL_TIMEOUT_MS = 2500; // 单个候选的硬超时（含 DNS/TCP/TLS 阶段）
         private const string LOCAL_HTTP_PROXY = "http://127.0.0.1:10809";
 
         private async Task PollTrafficLoop()

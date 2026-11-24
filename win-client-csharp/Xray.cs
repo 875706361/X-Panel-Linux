@@ -403,6 +403,11 @@ namespace XPanelWin
 
         public static Process Start(string configJson, string proto)
         {
+            // 先确保端口干净：切换模式/重连时上一个内核可能还没释放 10808，
+            // 直接 Start 会 bind 失败（用户 0.4 秒内连点两次模式就踩到了）。
+            KillOurKernels();
+            WaitPortFree(10808, 2500);
+            WaitPortFree(10809, 800);
             string exe, args, cfgPath;
             if (proto == "hy2")
             {
@@ -468,6 +473,55 @@ namespace XPanelWin
                 });
             }
             return p;
+        }
+
+        // 端口是否还被占着：用「自己试着 bind 一次」判断，比枚举 TCP 表准，也不会被
+        // IPv4/IPv6 双栈差异骗到。
+        private static bool PortInUse(int port)
+        {
+            try
+            {
+                var l = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, port);
+                l.Start();
+                l.Stop();
+                return false;
+            }
+            catch { return true; }
+        }
+
+        private static void WaitPortFree(int port, int timeoutMs)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                if (!PortInUse(port)) return;
+                System.Threading.Thread.Sleep(120);
+            }
+        }
+
+        // 上一个内核没退干净会一直占着 10808，新实例 bind 必失败。只清理我们自己释放到
+        // BinDir 的内核，绝不碰用户其它的 xray/hysteria。
+        private static void KillOurKernels()
+        {
+            foreach (var name in new[] { "xray", "hysteria" })
+            {
+                Process[] ps;
+                try { ps = Process.GetProcessesByName(name); } catch { continue; }
+                foreach (var q in ps)
+                {
+                    try
+                    {
+                        string path = null;
+                        try { if (q.MainModule != null) path = q.MainModule.FileName; } catch { }
+                        if (string.IsNullOrEmpty(path)) continue;
+                        if (path.IndexOf(BinDir, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        q.Kill();
+                        q.WaitForExit(1500);
+                        MainForm.LogToFile("[XRAY] 已清理残留内核 " + path);
+                    }
+                    catch { }
+                }
+            }
         }
 
         public static void Stop(Process p)
