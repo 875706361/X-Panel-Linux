@@ -48,6 +48,7 @@ public class MainActivity extends Activity {
     // 否则日志会被同一行刷屏，真出问题时反而看不见关键行。
     private String lastInfoLine = "";
     private String lastQueryError = "";
+    private String logReturnTo = "result";   // 日志页是从哪进来的，决定返回时回到哪
     private Handler handler = new Handler(Looper.getMainLooper());
     private static final String SB_DIR = "/data/data/com.example.xpanel/files/sb";
     private static final String SB_CONF = SB_DIR + "/config.json";
@@ -141,7 +142,7 @@ public class MainActivity extends Activity {
         btnCopyLog.setOnClickListener(v -> copyLog());
         btnLog1.setOnClickListener(v -> showLog());
         btnLog2.setOnClickListener(v -> showLog());
-        btnBackFromLog.setOnClickListener(v -> { if ("result".equals(lastPage)) showResult(); else showInput(); });
+        btnBackFromLog.setOnClickListener(v -> { if ("result".equals(logReturnTo)) showResult(); else showInput(); });
 
 
 
@@ -409,7 +410,7 @@ public class MainActivity extends Activity {
                     .putInt("r_exp_color", expColor)
                     .putString("r_status", fStatus)
                     .apply();
-                showResult();
+                if (!"log".equals(lastPage)) showResult();   // 正在看日志时不要把用户弹走
             });
             String infoLine = "=== 节点信息 ===  上行 " + fUp + " / 下行 " + fDown + " / 已用 " + fUsed + " / 到期 " + fExp;
             if (!infoLine.equals(lastInfoLine)) {      // 只在数值变化时落日志，避免刷屏
@@ -444,9 +445,19 @@ public class MainActivity extends Activity {
         logPanel.setVisibility(View.GONE);
         lastPage = "result";
         autoRefresh = true;
+        // 从日志页/输入页回到结果页时把轮询接回来（日志页会把它停掉）
+        handler.removeCallbacks(queryTask);
+        handler.post(queryTask);
     }
 
     private void showLog() {
+        // 记下来源，返回时才知道该回哪一页
+        logReturnTo = "result".equals(lastPage) ? "result" : "input";
+        lastPage = "log";
+        // 必须停掉轮询：doQuery 成功后无条件 showResult()，不停就会在 2 秒内
+        // 把用户从日志页弹回节点信息页（用户报的「点日志自动跳转」就是它）。
+        autoRefresh = false;
+        handler.removeCallbacks(queryTask);
         inputPanel.setVisibility(View.GONE);
         resultPanel.setVisibility(View.GONE);
         logPanel.setVisibility(View.VISIBLE);
