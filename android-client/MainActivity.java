@@ -49,6 +49,9 @@ public class MainActivity extends Activity {
     private String lastInfoLine = "";
     private String lastQueryError = "";
     private String logReturnTo = "result";   // 日志页是从哪进来的，决定返回时回到哪
+    // 只有「用户点登录」才允许查询成功后切到结果页；轮询和在途请求一律不许切页，
+    // 否则任何一次后台查询回来都会把用户从当前页面弹走（日志页/换链接页都中过招）。
+    private volatile boolean pendingLogin = false;
     private Handler handler = new Handler(Looper.getMainLooper());
     private static final String SB_DIR = "/data/data/com.example.xpanel/files/sb";
     private static final String SB_CONF = SB_DIR + "/config.json";
@@ -134,6 +137,7 @@ public class MainActivity extends Activity {
         btnQuery.setOnClickListener(v -> {
             log("[点击] 登录按钮");
             Toast.makeText(this, "正在登录...", Toast.LENGTH_SHORT).show();
+            pendingLogin = true;                 // 这次查询成功后要跳到结果页
             queryPanel();
         });
         btnPower.setOnClickListener(v -> { if (vpnRunning) stopVpn(); else startVpn(); });
@@ -340,6 +344,7 @@ public class MainActivity extends Activity {
                     queryPublic("https://" + info[2] + ":1111", info[1], silent);
                 }
             } catch (Exception e) {
+                pendingLogin = false;          // 查询失败：取消待切页，别等下次轮询成功时突然跳页
                 if (!silent) log("[查询] 异常: " + e.getMessage());
             } finally {
                 querying = false;
@@ -410,7 +415,10 @@ public class MainActivity extends Activity {
                     .putInt("r_exp_color", expColor)
                     .putString("r_status", fStatus)
                     .apply();
-                if (!"log".equals(lastPage)) showResult();   // 正在看日志时不要把用户弹走
+                if (pendingLogin) {                  // 只有用户主动登录才切页
+                    pendingLogin = false;
+                    showResult();
+                }
             });
             String infoLine = "=== 节点信息 ===  上行 " + fUp + " / 下行 " + fDown + " / 已用 " + fUsed + " / 到期 " + fExp;
             if (!infoLine.equals(lastInfoLine)) {      // 只在数值变化时落日志，避免刷屏
@@ -433,6 +441,7 @@ public class MainActivity extends Activity {
     private void showInput() {
         autoRefresh = false;
         handler.removeCallbacks(queryTask);
+        pendingLogin = false;          // 用户点了「换链接」，放弃任何待切页
         inputPanel.setVisibility(View.VISIBLE);
         resultPanel.setVisibility(View.GONE);
         logPanel.setVisibility(View.GONE);
@@ -710,9 +719,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        autoRefresh = true;
-        handler.removeCallbacks(queryTask);
-        handler.post(queryTask);
+        // 只有结果页需要实时刷新：在输入页/日志页后台轮询纯属白耗电
+        if ("result".equals(lastPage)) {
+            autoRefresh = true;
+            handler.removeCallbacks(queryTask);
+            handler.post(queryTask);
+        }
     }
 
     @Override
