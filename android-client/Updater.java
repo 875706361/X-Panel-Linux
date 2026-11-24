@@ -27,29 +27,56 @@ public final class Updater {
     private static final String TAG = "XPanelUpdate";
     private static volatile boolean started = false;
 
+    // 面板地址候选：443 优先（国内最稳，nginx 反代到面板），80 次之，
+    // 最后才直连面板端口 1111 —— 该端口在国内经常超时，旧版只写死它，
+    // 检查一失败就放弃，等于手机端从来没有真正自动更新过。
+    private static final String[] DEFAULT_BASES = {
+            "https://888888666.xyz/clay",
+            "http://888888666.xyz/clay",
+            "https://888888666.xyz:1111/clay"
+    };
+
     private Updater() {}
 
     public static void checkAsync(final Context ctx, final String baseUrl) {
         if (started || baseUrl == null || baseUrl.isEmpty()) return;
         started = true;
         new Thread(() -> {
-            try { check(ctx, baseUrl.replaceAll("/+$", "")); }
-            catch (Exception e) { Log.w(TAG, "update check failed: " + e); }
+            java.util.List<String> bases = new java.util.ArrayList<>();
+            for (String b : DEFAULT_BASES) bases.add(b);
+            String passed = baseUrl.replaceAll("/+$", "");
+            if (!bases.contains(passed)) bases.add(passed);
+            for (String b : bases) {
+                try {
+                    if (check(ctx, b)) return;      // 已处理（无需更新或已下载完）
+                } catch (Exception e) {
+                    Log.w(TAG, "check failed on " + b + ": " + e);
+                }
+            }
+            Log.w(TAG, "all bases failed");
         }, "xpanel-updater").start();
     }
 
-    private static void check(Context ctx, String base) throws Exception {
+    private static void toast(final Context ctx, final String msg) {
+        try {
+            new android.os.Handler(ctx.getMainLooper()).post(
+                    () -> android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show());
+        } catch (Exception ignored) { }
+    }
+
+    private static boolean check(Context ctx, String base) throws Exception {
         String json = httpGet(base + "/download/pkg/client.json");
-        if (json == null || json.isEmpty()) return;
+        if (json == null || json.isEmpty()) return false;
         JSONObject root = new JSONObject(json);
         JSONObject a = root.optJSONObject("android");
-        if (a == null) return;
+        if (a == null) return true;          // 清单正常但没 android 段，换个 base 也没用
         String want = a.optString("sha256", "");
-        if (want.isEmpty()) return;
+        if (want.isEmpty()) return true;
 
         String self = sha256(new File(ctx.getPackageCodePath()));
-        if (want.equalsIgnoreCase(self)) return;
-        Log.i(TAG, "new apk found, downloading");
+        if (want.equalsIgnoreCase(self)) return true;   // 已是最新
+        Log.i(TAG, "new apk found, downloading from " + base);
+        toast(ctx, "发现新版本，正在下载…");
 
         DownloadManager dm = (DownloadManager) ctx.getSystemService(Context.DOWNLOAD_SERVICE);
         DownloadManager.Request req = new DownloadManager.Request(
@@ -72,29 +99,32 @@ public final class Updater {
                     path = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI));
                     break;
                 }
-                if (status == DownloadManager.STATUS_FAILED) return;
+                if (status == DownloadManager.STATUS_FAILED) { toast(ctx, "更新下载失败，稍后重试"); return false; }
             }
         }
-        if (path == null) return;
+        if (path == null) return false;
         if (path.startsWith("file://")) path = Uri.parse(path).getPath();
-        if (path == null) return;
+        if (path == null) return false;
 
         if (!want.equalsIgnoreCase(sha256(new File(path)))) {
             Log.w(TAG, "sha256 mismatch, abort");
             new File(path).delete();
-            return;
+            return false;                      // 内容不对，换下一个 base 重下
         }
 
         if (rootInstall(path)) {
             Log.i(TAG, "installed via su");
-            return;
+            toast(ctx, "已自动更新到新版本");
+            return true;
         }
         Uri apk = dm.getUriForDownloadedFile(id);
-        if (apk == null) return;
+        if (apk == null) return true;
+        toast(ctx, "更新已下载，请按提示安装");
         Intent i = new Intent(Intent.ACTION_VIEW);
         i.setDataAndType(apk, "application/vnd.android.package-archive");
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
         ctx.startActivity(i);
+        return true;
     }
 
     private static boolean rootInstall(String path) {
