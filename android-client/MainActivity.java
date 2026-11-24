@@ -44,6 +44,10 @@ public class MainActivity extends Activity {
     private android.widget.Switch swBypassCN, swPerApp;
     private boolean vpnRunning = false;
     private String lastPage = "input";
+    // 上一次打印过的节点信息摘要：轮询每 2 秒一次，只有内容真的变了才写日志，
+    // 否则日志会被同一行刷屏，真出问题时反而看不见关键行。
+    private String lastInfoLine = "";
+    private String lastQueryError = "";
     private Handler handler = new Handler(Looper.getMainLooper());
     private static final String SB_DIR = "/data/data/com.example.xpanel/files/sb";
     private static final String SB_CONF = SB_DIR + "/config.json";
@@ -404,10 +408,19 @@ public class MainActivity extends Activity {
                     .apply();
                 showResult();
             });
-            log("=== 节点信息 ===  上行 " + fUp + " / 下行 " + fDown + " / 已用 " + fUsed + " / 到期 " + fExp);
+            String infoLine = "=== 节点信息 ===  上行 " + fUp + " / 下行 " + fDown + " / 已用 " + fUsed + " / 到期 " + fExp;
+            if (!infoLine.equals(lastInfoLine)) {      // 只在数值变化时落日志，避免刷屏
+                lastInfoLine = infoLine;
+                log(infoLine);
+            }
+            lastQueryError = "";                       // 恢复正常后清掉，下次再出错仍会记录
             return true;
         } catch (Exception e) {
-            log("[查询] 公开接口异常: " + e.getMessage());
+            String err = "[查询] 公开接口异常: " + e.getMessage();
+            if (!err.equals(lastQueryError)) {         // 同样的错误只记一次
+                lastQueryError = err;
+                log(err);
+            }
             throw e;
         }
     }
