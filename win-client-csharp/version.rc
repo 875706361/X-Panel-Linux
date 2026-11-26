@@ -1,6 +1,6 @@
 1 VERSIONINFO
-FILEVERSION 10,5,25,0
-PRODUCTVERSION 10,5,25,0
+FILEVERSION 10,5,26,0
+PRODUCTVERSION 10,5,26,0
 FILEFLAGSMASK 0x3fL
 FILEFLAGS 0x0L
 FILEOS 0x40004L
@@ -13,11 +13,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "X-Panel"
             VALUE "FileDescription", "X-Panel"
-            VALUE "FileVersion", "10.5.25"
+            VALUE "FileVersion", "10.5.26"
             VALUE "InternalName", "XPanel"
             VALUE "OriginalFilename", "XPanel.exe"
             VALUE "ProductName", "X-Panel"
-            VALUE "ProductVersion", "10.5.25"
+            VALUE "ProductVersion", "10.5.26"
         END
     END
     BLOCK "VarFileInfo"

@@ -61,6 +61,17 @@ namespace XPanelWin
             return "";
         }
 
+        // page2 下半段（按钮 → 探测行 → 页脚 → 更新提示）的落位约束。
+        // 探测行是后加的，必须证明它没压到「更换节点」按钮，也没把页脚顶出底栏。
+        internal static string CheckPage2Grid()
+        {
+            if (PROBE_Y < BTN3_Y + BTN3_H + 2) return "probe overlaps the switch button";
+            if (PROBE_Y + PROBE_H > FOOTER_Y) return "probe overlaps the footer";
+            if (FOOTER_Y + FOOTER_H > FOOTER_Y + 24) return "footer taller than its slot";
+            if (FOOTER_Y + 24 + 18 > LWH - LBAR - 4) return "update hint runs into the bottom bar";
+            return "";
+        }
+
         // page2：卡片 62..302，仪表盘按 Go v7.2.0 栅格（v9.1 卡片内重排，底部让位模式分段）
         const int CARD2_Y = 62, CARD2_H = 240;
         const int STATUS_Y = 80, STATUS_H = 24;
@@ -73,9 +84,12 @@ namespace XPanelWin
         const int MODE_Y = 258, MODE_H = 32;
         const int BTN2_Y = 316, BTN2_H = 48;
         const int BTN3_Y = 374, BTN3_H = 48;
-        const int FOOTER_Y = 440, FOOTER_H = 20;
+        // 连接后的真实连通性一行（延迟 / Google / YouTube），压在按钮和页脚之间：
+        // 原来 422..440 是空档，塞一行 16px 的小字不影响任何既有元素。
+        const int PROBE_Y = 424, PROBE_H = 18;
+        const int FOOTER_Y = 446, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.25";
+        internal const string VER = "v10.5.26";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
@@ -145,6 +159,8 @@ namespace XPanelWin
 
         private TransparentLabel _lblStatus, _lblExpire, _lblTotal, _lblTraffic;
         private TransparentLabel _lblUpLbl, _lblUp, _lblDownLbl, _lblDown, _lblFooter, _lblUpdate;
+        // 连接后的一行真实连通性（延迟 / Google / YouTube），只在已连接时有内容
+        private TransparentLabel _lblProbe;
         private FlatButton _btnConn, _btnSwitch, _btnSettings, _btnBack, _btnReset, _btnCheck, _btnLog, _btnLog2;
         // 粘贴完整链接后自动登录：绕开「按钮点不动」这种客户端环境问题。
         private System.Windows.Forms.Timer _autoLoginTimer;
@@ -246,7 +262,8 @@ namespace XPanelWin
                 }
                 else
                 {
-                    SwitchPage(1);
+                    // 诊断开关：XPL_PAGE=2 直接进仪表盘，用来在 Linux 上截图核对 page2 版式
+                    SwitchPage(System.Environment.GetEnvironmentVariable("XPL_PAGE") == "2" ? 2 : 1);
                 }
             }
             catch (Exception ex)

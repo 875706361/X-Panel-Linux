@@ -151,6 +151,16 @@ namespace XPanelWin
             _btnSettings.Click += (s, e) => SwitchPage(3);
 
             // 更新提示单独占一行：底部状态栏每 2 秒被轮询改写，挂在那里等于立刻被抹掉。
+            // 连接后的真实连通性：压在「更换节点」按钮与页脚之间，默认空着不占视觉
+            _lblProbe = MkLabel("", LM, PROBE_Y, LCW, PROBE_H, FSub, Theme.C(Theme.MUTED));
+            _lblProbe.TextAlign = ContentAlignment.MiddleCenter;
+            // 诊断用：XPL_PROBE_DEMO=1 时填样例文字，方便在 Linux 上截图核对版式
+            if (System.Environment.GetEnvironmentVariable("XPL_PROBE_DEMO") == "1")
+            {
+                _lblProbe.Text = "延迟 45ms  ·  Google 52ms  ·  YouTube 61ms";
+                _lblProbe.ForeColor = Theme.C(Theme.SUCCESS);
+            }
+
             _lblUpdate = MkLabel("", LM, FOOTER_Y + 24, LCW, 18, FSub, Theme.C(Theme.ACCENT));
             _lblUpdate.TextAlign = ContentAlignment.MiddleCenter;
 
@@ -167,7 +177,7 @@ namespace XPanelWin
                 _lblStatus, _lblExpire, _lblTotal, _lblTraffic,
                 _lblUpLbl, _lblUp, _lblDownLbl, _lblDown,
                 _btnConn, _btnSwitch, _lblFooter, _btnSettings, _lblUpdate,
-                _btnModeBypass, _btnModeGlobal
+                _btnModeBypass, _btnModeGlobal, _lblProbe
             });
         }
 

@@ -231,6 +231,7 @@ internal static class ExpiryTests {
     // 只能去任务管理器杀进程。
     static void CheckPage1Grid() {
         CheckEquals("page1 grid has no overlap", MainForm.CheckPage1Grid(), "");
+        CheckEquals("page2 probe row has no overlap", MainForm.CheckPage2Grid(), "");
     }
 
     static void CheckCloseOnImportPage() {

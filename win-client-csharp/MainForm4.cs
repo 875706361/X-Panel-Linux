@@ -170,6 +170,157 @@ namespace XPanelWin
             SwitchPage(1);
         }
 
+        // ---------- 连接后的连通性探测（延迟 / Google / YouTube）----------
+        // 和 Android 端同一套：客户端自己拿物理网卡测不出隧道，必须经 127.0.0.1:10809 出站。
+        private Thread _probeThread;
+        private volatile bool _probeOn;
+        private int _probeGen;
+        private string _lastProbeLine = "";
+        private readonly object _probeLock = new object();
+
+        private void StartProbe()
+        {
+            StopProbe();
+            _probeOn = true;
+            int gen;
+            lock (_stateLock) gen = ++_probeGen;
+            // 连上立刻给一行反馈，别让用户对着空白等
+            SetProbeLine("正在检测隧道连通性…", Theme.MUTED);
+            _probeThread = new Thread(delegate () { ProbeLoop(gen); });
+            _probeThread.IsBackground = true;
+            _probeThread.Start();
+        }
+
+        private void StopProbe()
+        {
+            _probeOn = false;
+            lock (_stateLock) _probeGen++;
+            lock (_probeLock) _lastProbeLine = "";
+            SetProbeLine("", Theme.FAINT);
+        }
+
+        private bool ProbeStale(int gen)
+        {
+            lock (_stateLock) return !_probeOn || gen != _probeGen;
+        }
+
+        private void SetProbeLine(string text, int clr)
+        {
+            Post(delegate ()
+            {
+                if (_lblProbe == null) return;
+                _lblProbe.Text = text;
+                _lblProbe.ForeColor = Theme.C(clr);
+            });
+        }
+
+        private bool SleepCancellable(int ms, int gen)
+        {
+            int waited = 0;
+            while (waited < ms)
+            {
+                if (ProbeStale(gen)) return false;
+                Thread.Sleep(200);
+                waited += 200;
+            }
+            return !ProbeStale(gen);
+        }
+
+        private void ProbeLoop(int gen)
+        {
+            while (!ProbeStale(gen))
+            {
+                Probe.Result r = new Probe.Result();
+                // 内核把 10809 监听起来就是隧道就绪的信号，不用固定 sleep 猜
+                bool up = Probe.WaitPort(Probe.HttpPort, 8000, delegate () { return ProbeStale(gen); });
+                if (ProbeStale(gen)) return;
+                if (!up)
+                {
+                    SetProbeLine("隧道未就绪：内核还在启动…", Theme.MUTED);
+                    if (!SleepCancellable(5000, gen)) return;
+                    continue;
+                }
+                PublishProbe(gen, r);      // 端口一通先刷新一次
+
+                // 三项并行，谁先回来谁先上屏
+                CountdownEvent latch = new CountdownEvent(3);
+                SpawnProbe(delegate () {
+                    try { r.Latency = Probe.Latency("www.gstatic.com", 4500); }
+                    catch { r.Latency = -1; }
+                }, latch, gen, r);
+                SpawnProbe(delegate () {
+                    try { int[] x = Probe.Http("www.gstatic.com", "/generate_204", 4500); r.Google = x[0]; r.GoogleConn = x[1]; r.GoogleTtfb = x[2]; }
+                    catch { r.Google = -1; }
+                }, latch, gen, r);
+                SpawnProbe(delegate () {
+                    try { int[] x = Probe.Http("www.youtube.com", "/generate_204", 4500); r.Youtube = x[0]; r.YoutubeConn = x[1]; r.YoutubeTtfb = x[2]; }
+                    catch { r.Youtube = -1; }
+                }, latch, gen, r);
+
+                latch.Wait(13000);
+                if (ProbeStale(gen)) return;
+                PublishProbe(gen, r);
+                if (!SleepCancellable(r.AllOk ? 30000 : 5000, gen)) return;
+            }
+        }
+
+        private void SpawnProbe(Action body, CountdownEvent latch, int gen, Probe.Result r)
+        {
+            Thread t = new Thread(delegate ()
+            {
+                try { body(); }
+                finally
+                {
+                    latch.Signal();
+                    PublishProbe(gen, r);
+                }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        private void PublishProbe(int gen, Probe.Result r)
+        {
+            if (ProbeStale(gen)) return;
+            bool gOk = r.Google > 0 && r.Google < 400;
+            bool yOk = r.Youtube > 0 && r.Youtube < 400;
+            string line = "延迟 " + FmtLat(r.Latency)
+                + "  ·  Google " + FmtConn(r.Google, r.GoogleConn)
+                + "  ·  YouTube " + FmtConn(r.Youtube, r.YoutubeConn);
+            int clr;
+            if (!r.AllDone) clr = Theme.MUTED;                       // 还在测
+            else if (r.Latency > 0 && gOk && yOk) clr = Theme.SUCCESS;
+            else if (gOk || yOk) clr = Theme.ACCENT;                  // 部分通
+            else clr = Theme.DANGER;
+            SetProbeLine(line, clr);
+            if (r.AllDone)
+            {
+                bool changed;
+                lock (_probeLock)
+                {
+                    changed = line != _lastProbeLine;
+                    if (changed) _lastProbeLine = line;
+                }
+                if (changed)
+                    LogToFile("[探测] " + line + " | 首字节 Google " + r.GoogleTtfb + "ms · YouTube " + r.YoutubeTtfb + "ms");
+            }
+        }
+
+        private static string FmtLat(int v)
+        {
+            if (v == 0) return "测速中";
+            if (v < 0) return "✗";
+            return v + "ms";
+        }
+
+        // 判通断看 HTTP 状态码，显示用连接耗时，避免把握手成本算进"延迟"
+        private static string FmtConn(int code, int connMs)
+        {
+            if (code == 0) return "测速中";
+            if (code < 0) return "✗";
+            return connMs > 0 ? connMs + "ms" : "✓";
+        }
+
         // ---------- 代理开关 ----------
 
         private void ToggleConnect()
@@ -257,6 +408,7 @@ namespace XPanelWin
                     SetFooterHint(null, false);
                     ShowTip("已连接 · " + protoTag + (nodeName.Length > 0 ? " · " + nodeName : ""), false);
                     Invalidate();
+                    StartProbe();      // 连上立刻探测，端口就绪即出结果
                 });
             });
             th.IsBackground = true;
@@ -299,6 +451,7 @@ namespace XPanelWin
         private void StopProxy()
         {
             lock (_stateLock) _connectGen++;   // 作废还没回来的就绪检查
+            StopProbe();                       // 探测线程一起收掉，别让它继续打流量
             Xray.Stop(_xray);
             _xray = null;
             SetSystemProxy(false, "");

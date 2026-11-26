@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-SRC="Program.cs Native.cs Controls.cs Fonts.cs LinkParser.cs Xray.cs Updater.cs \
+SRC="Program.cs Native.cs Controls.cs Fonts.cs LinkParser.cs Xray.cs Probe.cs Updater.cs \
      MainForm.cs MainForm2.cs MainForm3.cs MainForm4.cs"
 REFS="-r:System.Windows.Forms.dll -r:System.Drawing.dll \
       -r:/usr/lib/mono/4.5/System.Web.Extensions.dll \
@@ -30,5 +30,12 @@ mono /tmp/xpanel-updater-tests.exe || rc=1
 # 字体系统：字号=逻辑像素、随 DPI 等比放大、装得进槽位
 build /tmp/xpanel-font-tests.exe XPanelWin.FontTests tests/FontTests.cs
 mono /tmp/xpanel-font-tests.exe || rc=1
+
+# 连接后探测链路（CONNECT → TLS → 204）：需要一个本地 CONNECT 代理监听 10809，
+# 所以默认不跑，XPL_PROBE_LIVE=1 时才执行。
+if [ "$XPL_PROBE_LIVE" = "1" ]; then
+    build /tmp/xpanel-probe-tests.exe XPanelWin.ProbeTest tests/ProbeTest.cs
+    mono /tmp/xpanel-probe-tests.exe || rc=1
+fi
 
 exit $rc

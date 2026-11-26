@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")"
 
-SRC="Program.cs Native.cs Controls.cs Fonts.cs LinkParser.cs Xray.cs Updater.cs LogForm.cs MainForm.cs MainForm2.cs MainForm3.cs MainForm4.cs"
+SRC="Program.cs Native.cs Controls.cs Fonts.cs LinkParser.cs Xray.cs Probe.cs Updater.cs LogForm.cs MainForm.cs MainForm2.cs MainForm3.cs MainForm4.cs"
 OUT="XPanel.exe"
 
 # .NET Framework（所有版本）缺少 mono/Core 才有的单参数 char 重载：
