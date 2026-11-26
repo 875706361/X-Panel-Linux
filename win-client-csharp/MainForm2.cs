@@ -101,6 +101,12 @@ namespace XPanelWin
             {
                 if (e.Button != MouseButtons.Left) return;
                 if (!_btnLogin.ClientRectangle.Contains(e.Location)) return;
+                // 刚切到导入页：这个 MouseUp 是「更换节点」那一下漏过来的，不是用户点登录
+                if (unchecked(Environment.TickCount - _page1ShownTick) < 350)
+                {
+                    LogToFile("[UI] 切页后的 MouseUp 忽略（否则更换节点会被登录按钮立刻弹回）");
+                    return;
+                }
                 LogToFile("[UI] 登录按钮 MouseUp 命中");
                 if (!LoginRecentlyHandled()) HandleLogin();
             };
@@ -381,6 +387,7 @@ namespace XPanelWin
         {
             if (InvokeRequired) { Invoke(new Action<int>(SwitchPage), p); return; }
             _page = p;
+            if (p == 1) _page1ShownTick = Environment.TickCount;
             try
             {
                 foreach (var c in _page1) c.Visible = (p == 1);

@@ -89,7 +89,7 @@ namespace XPanelWin
         const int PROBE_Y = 424, PROBE_H = 18;
         const int FOOTER_Y = 446, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.29";
+        internal const string VER = "v10.5.30";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
@@ -136,6 +136,10 @@ namespace XPanelWin
         internal static float DpiScale = 1f;
 
         private int _page = 1;
+        // 切页时刻：更换节点(374) 与 登录节点(364) 在 y 轴上重叠 38px，
+        // 点「更换节点」时 Click 里切到导入页，同一次 MouseUp 会继续投递给刚显示的登录按钮，
+        // 于是导入页一闪就被自己的登录按钮弹回仪表盘。切页后 350ms 内的 MouseUp 一律忽略。
+        private int _page1ShownTick;
         private bool _connected, _busy;
         // 自动更新用来决定「运行期能不能装」和「能不能走本地代理拉清单」。
         internal bool IsConnected { get { return _connected; } }
