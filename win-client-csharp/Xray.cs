@@ -408,6 +408,10 @@ namespace XPanelWin
             KillOurKernels();
             WaitPortFree(10808, 2500);
             WaitPortFree(10809, 800);
+            // 还占着说明是「读不到路径的残留内核」（自动更新后旧进程权限不同，MainModule 会抛异常，
+            // 上一版就是这样漏杀、用户点了连接直接报 bind 失败）。按端口反查 PID 精确清理。
+            if (PortInUse(10808)) { KillPortOwner(10808); WaitPortFree(10808, 3000); }
+            if (PortInUse(10809)) { KillPortOwner(10809); WaitPortFree(10809, 1500); }
             string exe, args, cfgPath;
             if (proto == "hy2")
             {
@@ -522,6 +526,56 @@ namespace XPanelWin
                     catch { }
                 }
             }
+        }
+
+        // 按端口反查占用者并只杀我们自己的内核（xray / hysteria）。
+        // 存在意义：自动更新后旧内核可能以不同权限运行，MainModule 读取会抛异常，
+        // 于是 KillOurKernels 的路径匹配漏掉它，端口一直占着，新内核 bind 10808 失败。
+        private static bool KillPortOwner(int port)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo("netstat", "-ano")
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                };
+                using (var np = Process.Start(psi))
+                {
+                    if (np == null) return false;
+                    string dump = np.StandardOutput.ReadToEnd();
+                    np.WaitForExit(3000);
+                    foreach (var raw in dump.Split(new char[] { '\n' }))
+                    {
+                        string[] parts = raw.Trim().Split(new char[] { ' ' },
+                            StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length < 5) continue;
+                        if (parts[0] != "TCP") continue;
+                        if (!parts[1].EndsWith(":" + port)) continue;
+                        int pid;
+                        if (!int.TryParse(parts[parts.Length - 1], out pid) || pid <= 4) continue;
+                        try
+                        {
+                            var q = Process.GetProcessById(pid);
+                            string nm = (q.ProcessName ?? "").ToLowerInvariant();
+                            if (nm != "xray" && nm != "hysteria")
+                            {
+                                MainForm.LogToFile("[XRAY] 端口 " + port + " 被非本客户端进程占用 pid=" + pid
+                                    + " (" + nm + ")，不去动它");
+                                return false;
+                            }
+                            q.Kill();
+                            q.WaitForExit(2000);
+                            MainForm.LogToFile("[XRAY] 已按端口清理残留内核 " + nm + " pid=" + pid + " port=" + port);
+                            return true;
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+            return false;
         }
 
         public static void Stop(Process p)

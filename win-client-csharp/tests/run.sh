@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 SRC="Program.cs Native.cs Controls.cs Fonts.cs LinkParser.cs Xray.cs Probe.cs Updater.cs \
-     MainForm.cs MainForm2.cs MainForm3.cs MainForm4.cs"
+     LogForm.cs MainForm.cs MainForm2.cs MainForm3.cs MainForm4.cs"
 REFS="-r:System.Windows.Forms.dll -r:System.Drawing.dll \
       -r:/usr/lib/mono/4.5/System.Web.Extensions.dll \
       -r:System.IO.Compression.dll -r:System.IO.Compression.FileSystem.dll"

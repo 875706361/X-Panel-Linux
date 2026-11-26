@@ -242,26 +242,52 @@ namespace XPanelWin
                 }
                 PublishProbe(gen, r);      // 端口一通先刷新一次
 
+                // 「延迟」必须是节点入口的 TCP RTT：本地 http 入站收到 CONNECT 会先回 200 再拨号，
+                // 所以经它测出来的"建连耗时"永远是 1~6ms，那是回环不是隧道（线上日志已踩到）。
+                string nodeHost = _node != null ? _node.address : null;
+                int nodePort = 0;
+                if (_node != null && !string.IsNullOrEmpty(_node.port)) int.TryParse(_node.port, out nodePort);
+
                 // 三项并行，谁先回来谁先上屏
                 CountdownEvent latch = new CountdownEvent(3);
-                SpawnProbe(delegate () {
-                    try { r.Latency = Probe.Latency("www.gstatic.com", 4500); }
-                    catch { r.Latency = -1; }
+                SpawnProbe(delegate ()
+                {
+                    if (string.IsNullOrEmpty(nodeHost) || nodePort <= 0) { r.Latency = -1; r.LatencyErr = "没有节点地址"; return; }
+                    try { r.Latency = Probe.TcpRtt(nodeHost, nodePort, PROBE_PORT_TIMEOUT_MS); }
+                    catch (Exception ex) { r.Latency = -1; r.LatencyErr = Probe.ShortErr(ex); }
                 }, latch, gen, r);
-                SpawnProbe(delegate () {
-                    try { int[] x = Probe.Http("www.gstatic.com", "/generate_204", 4500); r.Google = x[0]; r.GoogleConn = x[1]; r.GoogleTtfb = x[2]; }
-                    catch { r.Google = -1; }
-                }, latch, gen, r);
-                SpawnProbe(delegate () {
-                    try { int[] x = Probe.Http("www.youtube.com", "/generate_204", 4500); r.Youtube = x[0]; r.YoutubeConn = x[1]; r.YoutubeTtfb = x[2]; }
-                    catch { r.Youtube = -1; }
-                }, latch, gen, r);
+                SpawnProbe(delegate () { ProbeHttp("www.gstatic.com", r, true); }, latch, gen, r);
+                SpawnProbe(delegate () { ProbeHttp("www.youtube.com", r, false); }, latch, gen, r);
 
-                latch.Wait(13000);
+                latch.Wait(22000);
                 if (ProbeStale(gen)) return;
                 PublishProbe(gen, r);
                 if (!SleepCancellable(r.AllOk ? 30000 : 5000, gen)) return;
             }
+        }
+
+        private const int PROBE_PORT_TIMEOUT_MS = 4500;   // 节点 TCP 握手
+        private const int PROBE_SITE_TIMEOUT_MS = 8000;   // 经隧道到站点的首字节
+
+        // 站点探测：首字节才是用户感知，重试只针对异常（超时/被拒），拿到状态码就收手。
+        private void ProbeHttp(string host, Probe.Result r, bool isGoogle)
+        {
+            int code = 0, conn = 0, ttfb = 0, attempts = isGoogle ? 1 : 2;
+            string err = null;
+            for (int i = 0; i < attempts; i++)
+            {
+                if (ProbeStale(_probeGen)) break;
+                try
+                {
+                    int[] x = Probe.Http(host, "/generate_204", PROBE_SITE_TIMEOUT_MS, out err);
+                    code = x[0]; conn = x[1]; ttfb = x[2];
+                    err = (code >= 200 && code < 400) ? null : "状态码 " + code;
+                    if (err == null) break;
+                }
+                catch (Exception ex) { code = -1; err = Probe.ShortErr(ex); }
+            }
+            if (isGoogle) { r.Google = code; r.GoogleConn = conn; r.GoogleTtfb = ttfb; r.GoogleErr = err; }
+            else { r.Youtube = code; r.YoutubeConn = conn; r.YoutubeTtfb = ttfb; r.YoutubeErr = err; }
         }
 
         private void SpawnProbe(Action body, CountdownEvent latch, int gen, Probe.Result r)
@@ -285,12 +311,12 @@ namespace XPanelWin
             bool gOk = r.Google > 0 && r.Google < 400;
             bool yOk = r.Youtube > 0 && r.Youtube < 400;
             string line = "延迟 " + FmtLat(r.Latency)
-                + "  ·  Google " + FmtConn(r.Google, r.GoogleConn)
-                + "  ·  YouTube " + FmtConn(r.Youtube, r.YoutubeConn);
+                + "  ·  Google " + FmtSite(r.Google, r.GoogleTtfb)
+                + "  ·  YouTube " + FmtSite(r.Youtube, r.YoutubeTtfb);
             int clr;
             if (!r.AllDone) clr = Theme.MUTED;                       // 还在测
             else if (r.Latency > 0 && gOk && yOk) clr = Theme.SUCCESS;
-            else if (gOk || yOk) clr = Theme.ACCENT;                  // 部分通
+            else if (gOk || yOk || r.Latency > 0) clr = Theme.ACCENT; // 部分通
             else clr = Theme.DANGER;
             SetProbeLine(line, clr);
             if (r.AllDone)
@@ -302,7 +328,14 @@ namespace XPanelWin
                     if (changed) _lastProbeLine = line;
                 }
                 if (changed)
-                    LogToFile("[探测] " + line + " | 首字节 Google " + r.GoogleTtfb + "ms · YouTube " + r.YoutubeTtfb + "ms");
+                    LogToFile("[探测] " + line
+                        + " | 节点 " + (_node != null ? _node.address + ":" + _node.port : "-")
+                        + " · Google 连接 " + r.GoogleConn + "ms 首字节 " + r.GoogleTtfb + "ms"
+                        + " · YouTube 连接 " + r.YoutubeConn + "ms 首字节 " + r.YoutubeTtfb + "ms"
+                        + (r.Latency > 0 && !gOk && !yOk ? " | 节点能连但站点不通，建议换节点" : "")
+                        + (!gOk && r.GoogleErr != null ? " | Google: " + r.GoogleErr : "")
+                        + (!yOk && r.YoutubeErr != null ? " | YouTube: " + r.YoutubeErr : ""));
+
             }
         }
 
@@ -313,12 +346,12 @@ namespace XPanelWin
             return v + "ms";
         }
 
-        // 判通断看 HTTP 状态码，显示用连接耗时，避免把握手成本算进"延迟"
-        private static string FmtConn(int code, int connMs)
+        // 站点显示首字节：经本地 http 入站的"建连耗时"是回环瞬时值，没有参考意义
+        private static string FmtSite(int code, int ttfbMs)
         {
             if (code == 0) return "测速中";
             if (code < 0) return "✗";
-            return connMs > 0 ? connMs + "ms" : "✓";
+            return ttfbMs > 0 ? ttfbMs + "ms" : "✓";
         }
 
         // ---------- 代理开关 ----------
