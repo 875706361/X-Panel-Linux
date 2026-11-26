@@ -2,8 +2,10 @@
 // 与 Android 端同一套逻辑：客户端自身不能拿物理网卡去测，
 // 必须经内核开在 127.0.0.1:10809 的 http 入站出站，结果才代表隧道是否真的通。
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
@@ -67,22 +69,54 @@ namespace XPanelWin
         /// 节点入口的 TCP RTT —— 这就是用户口中的"延迟"。
         /// 不能经本地 http 入站测：xray 的 http inbound 收到 CONNECT 会先回 200 再拨号，
         /// 测出来永远是 1~6ms 的回环值（线上日志已踩到 "延迟 1ms / Google 1ms"）。
+        /// 只走 IPv4：域名若带 AAAA，在 IPv6 不通的网络里首个地址就会把预算耗光（线上踩到全部超时）。
         /// </summary>
         internal static int TcpRtt(string host, int port, int timeoutMs)
+        {
+            System.Net.IPAddress[] addrs;
+            try { addrs = Dns.GetHostAddresses(host); }
+            catch (Exception ex) { throw new Exception("解析失败: " + ShortErr(ex)); }
+
+            var v4 = new List<System.Net.IPAddress>();
+            foreach (var a in addrs)
+                if (a.AddressFamily == AddressFamily.InterNetwork && !v4.Contains(a)) v4.Add(a);
+            if (v4.Count == 0) throw new Exception("域名没有 IPv4 地址: " + host);
+
+            Exception last = null;
+            int best = -1;
+            // 两轮 × 每个地址：单次 SYN 被丢不代表不通，同时也不让整项拖过 4.5s
+            int perTry = Math.Max(1200, timeoutMs / (v4.Count * 2));
+            for (int pass = 0; pass < 2; pass++)
+            {
+                foreach (var ip in v4)
+                {
+                    try
+                    {
+                        int ms = ConnectOnce(ip, port, perTry);
+                        if (best < 0 || ms < best) best = ms;
+                    }
+                    catch (Exception ex) { last = ex; }
+                }
+                if (best > 0) break;
+            }
+            if (best > 0) return best;
+            throw new Exception(last != null ? ShortErr(last) : "连接超时 " + timeoutMs + "ms");
+        }
+
+        private static int ConnectOnce(System.Net.IPAddress ip, int port, int timeoutMs)
         {
             using (var c = new TcpClient())
             {
                 c.NoDelay = true;
                 var sw = Stopwatch.StartNew();
-                var ar = c.BeginConnect(host, port, null, null);
+                var ar = c.BeginConnect(ip, port, null, null);
                 if (!ar.AsyncWaitHandle.WaitOne(timeoutMs))
                 {
                     try { c.Close(); } catch { }
-                    throw new TimeoutException("连接节点超时 " + timeoutMs + "ms");
+                    throw new TimeoutException("连接 " + ip + ":" + port + " 超时");
                 }
                 c.EndConnect(ar);
-                long ms = sw.ElapsedMilliseconds;
-                return (int)Math.Max(1, ms);
+                return (int)Math.Max(1, sw.ElapsedMilliseconds);
             }
         }
 

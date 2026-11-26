@@ -332,6 +332,13 @@ namespace XPanelWin
 
             bool gOk = r.Google > 0 && r.Google < 400;
             bool yOk = r.Youtube > 0 && r.Youtube < 400;
+            // 三项都失败、且节点入口 TCP 就没通：这不是"墙挡住了网站"，是这个节点此刻连不上，
+            // 直说比让用户对着三个 ✗ 猜要强。日志里另有逐项原因。
+            if (r.AllDone && r.Latency < 0 && !gOk && !yOk)
+            {
+                SetProbeLine("节点连不上 · 换个节点或稍后重试", Theme.DANGER);
+                return;
+            }
             string line = "延迟 " + FmtLat(r.Latency)
                 + "  ·  Google " + FmtSite(r.Google, r.GoogleTtfb)
                 + "  ·  YouTube " + FmtSite(r.Youtube, r.YoutubeTtfb);
@@ -341,24 +348,6 @@ namespace XPanelWin
             else if (gOk || yOk || r.Latency > 0) clr = Theme.ACCENT; // 部分通
             else clr = Theme.DANGER;
             SetProbeLine(line, clr);
-            if (r.AllDone)
-            {
-                bool changed;
-                lock (_probeLock)
-                {
-                    changed = line != _lastProbeLine;
-                    if (changed) _lastProbeLine = line;
-                }
-                if (changed)
-                    LogToFile("[探测] " + line
-                        + " | 节点 " + (_node != null ? _node.address + ":" + _node.port : "-")
-                        + " · Google 连接 " + r.GoogleConn + "ms 首字节 " + r.GoogleTtfb + "ms"
-                        + " · YouTube 连接 " + r.YoutubeConn + "ms 首字节 " + r.YoutubeTtfb + "ms"
-                        + (r.Latency > 0 && !gOk && !yOk ? " | 节点能连但站点不通，建议换节点" : "")
-                        + (!gOk && r.GoogleErr != null ? " | Google: " + r.GoogleErr : "")
-                        + (!yOk && r.YoutubeErr != null ? " | YouTube: " + r.YoutubeErr : ""));
-
-            }
         }
 
         private static string FmtLat(int v)

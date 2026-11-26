@@ -89,7 +89,7 @@ namespace XPanelWin
         const int PROBE_Y = 424, PROBE_H = 18;
         const int FOOTER_Y = 446, FOOTER_H = 20;
 
-        internal const string VER = "v10.5.28";
+        internal const string VER = "v10.5.29";
 
         // 字体与槽位配对自检。两条规则，都不依赖当前系统装了什么字体：
         //  1) 单行行高按「字号 × 1.35」估算——雅黑实测 1.32、宋体 1.18，按最差情况留量，
