@@ -99,12 +99,14 @@ namespace XPanelWin
         {
             err = null;
             int[] res = new int[3];
+            string stage = "建连";
             using (var c = new TcpClient())
             {
                 try
                 {
                     var sw = Stopwatch.StartNew();
                     ConnectLocal(c, timeoutMs);
+                    stage = "隧道";
                     NetworkStream ns = c.GetStream();
                     byte[] creq = Encoding.ASCII.GetBytes(
                         "CONNECT " + host + ":443 HTTP/1.1\r\nHost: " + host + ":443\r\n\r\n");
@@ -120,12 +122,14 @@ namespace XPanelWin
 
                     sw.Reset();
                     sw.Start();
+                    stage = "TLS";
                     // 探测只发一个 GET /generate_204，不带任何凭据；老系统根证书缺失时忽略证书错误，
                     // 免得把"其实通了、只是证书链不全"误判成隧道不通。
                     using (var ssl = new SslStream(ns, false,
                                new RemoteCertificateValidationCallback(delegate { return true; })))
                     {
                         ssl.AuthenticateAsClient(host);
+                        stage = "HTTP";
                         byte[] greq = Encoding.ASCII.GetBytes(
                             "GET " + path + " HTTP/1.1\r\nHost: " + host
                             + "\r\nUser-Agent: XPanel-Win\r\nAccept: */*\r\nConnection: close\r\n\r\n");
@@ -138,7 +142,7 @@ namespace XPanelWin
                 }
                 catch (Exception ex)
                 {
-                    if (err == null) err = ShortErr(ex);
+                    if (err == null) err = stage + "失败: " + ShortErr(ex);
                     throw;
                 }
             }

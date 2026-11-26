@@ -157,7 +157,7 @@ namespace XPanelWin
             // 诊断用：XPL_PROBE_DEMO=1 时填样例文字，方便在 Linux 上截图核对版式
             if (System.Environment.GetEnvironmentVariable("XPL_PROBE_DEMO") == "1")
             {
-                _lblProbe.Text = "延迟 45ms  ·  Google 52ms  ·  YouTube 61ms";
+                _lblProbe.Text = "延迟 61ms  ·  Google 529ms  ·  YouTube 422ms";
                 _lblProbe.ForeColor = Theme.C(Theme.SUCCESS);
             }
 

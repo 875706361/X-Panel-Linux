@@ -175,6 +175,7 @@ namespace XPanelWin
         private Thread _probeThread;
         private volatile bool _probeOn;
         private int _probeGen;
+        private int _probeRound;                 // 轮次号：上一轮超时还活着的线程不许覆盖这一轮的结果
         private string _lastProbeLine = "";
         private readonly object _probeLock = new object();
 
@@ -237,10 +238,12 @@ namespace XPanelWin
                 if (!up)
                 {
                     SetProbeLine("隧道未就绪：内核还在启动…", Theme.MUTED);
+                    LogToFile("[探测] 10809 一直没起来，本轮跳过");
                     if (!SleepCancellable(5000, gen)) return;
                     continue;
                 }
                 PublishProbe(gen, r);      // 端口一通先刷新一次
+                int round; lock (_probeLock) round = ++_probeRound;
 
                 // 「延迟」必须是节点入口的 TCP RTT：本地 http 入站收到 CONNECT 会先回 200 再拨号，
                 // 所以经它测出来的"建连耗时"永远是 1~6ms，那是回环不是隧道（线上日志已踩到）。
@@ -255,42 +258,53 @@ namespace XPanelWin
                     if (string.IsNullOrEmpty(nodeHost) || nodePort <= 0) { r.Latency = -1; r.LatencyErr = "没有节点地址"; return; }
                     try { r.Latency = Probe.TcpRtt(nodeHost, nodePort, PROBE_PORT_TIMEOUT_MS); }
                     catch (Exception ex) { r.Latency = -1; r.LatencyErr = Probe.ShortErr(ex); }
-                }, latch, gen, r);
-                SpawnProbe(delegate () { ProbeHttp("www.gstatic.com", r, true); }, latch, gen, r);
-                SpawnProbe(delegate () { ProbeHttp("www.youtube.com", r, false); }, latch, gen, r);
+                }, latch, gen, r, round);
+                SpawnProbe(delegate () { ProbeHttp("www.gstatic.com", r, true); }, latch, gen, r, round);
+                SpawnProbe(delegate () { ProbeHttp("www.youtube.com", r, false); }, latch, gen, r, round);
 
-                latch.Wait(22000);
+                // 单轮必须封顶：一轮超时不能把整条探测线程挂死，也不该让"测速中"无限停留
+                latch.Wait(9000);
                 if (ProbeStale(gen)) return;
                 PublishProbe(gen, r);
+                string summary = "延迟 " + FmtLat(r.Latency)
+                    + " · Google " + FmtSite(r.Google, r.GoogleTtfb)
+                    + " · YouTube " + FmtSite(r.Youtube, r.YoutubeTtfb);
+                LogToFile("[探测] " + (r.AllOk ? "全部连通" : (r.AllDone ? "本轮有失败" : "本轮未完成"))
+                    + " | " + summary
+                    + " | 节点 " + (nodeHost ?? "-") + ":" + nodePort
+                    + " · Google 连接 " + r.GoogleConn + "ms 首字节 " + r.GoogleTtfb + "ms"
+                    + " · YouTube 连接 " + r.YoutubeConn + "ms 首字节 " + r.YoutubeTtfb + "ms"
+                    + (r.LatencyErr != null ? " | 延迟: " + r.LatencyErr : "")
+                    + (r.GoogleErr != null ? " | Google: " + r.GoogleErr : "")
+                    + (r.YoutubeErr != null ? " | YouTube: " + r.YoutubeErr : ""));
                 if (!SleepCancellable(r.AllOk ? 30000 : 5000, gen)) return;
             }
         }
 
         private const int PROBE_PORT_TIMEOUT_MS = 4500;   // 节点 TCP 握手
-        private const int PROBE_SITE_TIMEOUT_MS = 8000;   // 经隧道到站点的首字节
+        private const int PROBE_SITE_TIMEOUT_MS = 6000;   // 经隧道到站点的首字节；失败下一轮（5s 后）自然重试
 
-        // 站点探测：首字节才是用户感知，重试只针对异常（超时/被拒），拿到状态码就收手。
+        // 站点探测：首字节才是用户感知。失败时把阶段一起记下来（建连/TLS/HTTP），
+        // 否则用户只看到 ✗，分不清是本地内核、隧道还是对端的问题。
         private void ProbeHttp(string host, Probe.Result r, bool isGoogle)
         {
-            int code = 0, conn = 0, ttfb = 0, attempts = isGoogle ? 1 : 2;
+            int code = 0, conn = 0, ttfb = 0;
             string err = null;
-            for (int i = 0; i < attempts; i++)
+            if (!ProbeStale(_probeGen))
             {
-                if (ProbeStale(_probeGen)) break;
                 try
                 {
                     int[] x = Probe.Http(host, "/generate_204", PROBE_SITE_TIMEOUT_MS, out err);
                     code = x[0]; conn = x[1]; ttfb = x[2];
-                    err = (code >= 200 && code < 400) ? null : "状态码 " + code;
-                    if (err == null) break;
+                    if (code < 200 || code >= 400) err = "状态码 " + code;
                 }
-                catch (Exception ex) { code = -1; err = Probe.ShortErr(ex); }
+                catch (Exception ex) { code = -1; if (err == null) err = Probe.ShortErr(ex); }
             }
             if (isGoogle) { r.Google = code; r.GoogleConn = conn; r.GoogleTtfb = ttfb; r.GoogleErr = err; }
             else { r.Youtube = code; r.YoutubeConn = conn; r.YoutubeTtfb = ttfb; r.YoutubeErr = err; }
         }
 
-        private void SpawnProbe(Action body, CountdownEvent latch, int gen, Probe.Result r)
+        private void SpawnProbe(Action body, CountdownEvent latch, int gen, Probe.Result r, int round)
         {
             Thread t = new Thread(delegate ()
             {
@@ -298,7 +312,7 @@ namespace XPanelWin
                 finally
                 {
                     latch.Signal();
-                    PublishProbe(gen, r);
+                    PublishProbe(gen, r, round);
                 }
             });
             t.IsBackground = true;
@@ -308,6 +322,14 @@ namespace XPanelWin
         private void PublishProbe(int gen, Probe.Result r)
         {
             if (ProbeStale(gen)) return;
+            PublishProbe(gen, r, -1);
+        }
+
+        private void PublishProbe(int gen, Probe.Result r, int round)
+        {
+            if (ProbeStale(gen)) return;
+            if (round >= 0) { lock (_probeLock) if (round != _probeRound) return; }
+
             bool gOk = r.Google > 0 && r.Google < 400;
             bool yOk = r.Youtube > 0 && r.Youtube < 400;
             string line = "延迟 " + FmtLat(r.Latency)
@@ -384,6 +406,9 @@ namespace XPanelWin
             }
             _node = n;
             SetStatus("正在连接...", Theme.C(Theme.ACCENT));
+            // 连接生命周期全部落盘：内核被谁重启、探测轮次为何作废，事后只能靠这几行还原
+            LogToFile("[CONN] 开始连接 " + n.proto + " " + n.address + ":" + n.port
+                + " 模式=" + (_bypassCn ? "绕过大陆" : "全局"));
 
             try { Xray.EnsureFiles(); }
             catch (Exception ex)
@@ -434,6 +459,8 @@ namespace XPanelWin
                     return;
                 }
                 try { SetSystemProxy(true, "127.0.0.1:10809"); } catch { }
+                LogToFile("[CONN] 已连接，系统代理 -> 127.0.0.1:10809");
+
                 Post(() =>
                 {
                     _connected = true;
@@ -483,6 +510,7 @@ namespace XPanelWin
 
         private void StopProxy()
         {
+            LogToFile("[CONN] 断开连接（探测线程与内核一起收掉）");
             lock (_stateLock) _connectGen++;   // 作废还没回来的就绪检查
             StopProbe();                       // 探测线程一起收掉，别让它继续打流量
             Xray.Stop(_xray);
