@@ -33,6 +33,7 @@ import java.net.Socket;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -57,10 +58,14 @@ public class MainActivity extends Activity {
     // 连接后的连通性探测：延迟 + Google + YouTube，经本地 socks 出站实测
     private TextView tvProbe;
     private volatile boolean probeRunning = false;
-    private Runnable probeTask;
+    private volatile boolean probeFirstRound = true;
+    private volatile ProbeResult curProbe;
     private String lastProbeLine = "";
     private static final int SOCKS_PORT = 10808;
-    private static final int PROBE_INTERVAL_MS = 30000;
+    private static final int PROBE_INTERVAL_MS = 30000;   // 全通后的慢轮询
+    private static final int PROBE_RETRY_MS = 5000;       // 没全通就快些重试
+    private static final int SOCKS_WAIT_MS = 8000;        // 等核心 listen 10808 的上限
+    private static final int PROBE_TIMEOUT_MS = 4500;     // 单次 socks 连接/读取超时
     private Handler handler = new Handler(Looper.getMainLooper());
     private static final String SB_DIR = "/data/data/com.example.xpanel/files/sb";
     private static final String SB_CONF = SB_DIR + "/config.json";
@@ -223,36 +228,50 @@ public class MainActivity extends Activity {
     // （防 IPC 回环），所以直接 new Socket() 访问 Google 走的是物理网卡，测不出隧道状态。
     // 必须经 sing-box 在 127.0.0.1:10808 开的 socks inbound 出站，结果才代表隧道是否真的通。
     private static class ProbeResult {
-        long latency = -1;      // socks CONNECT 到 gstatic 的耗时
-        int google = -1;        // HTTP 状态码，-1 表示没拿到响应
-        long googleMs = -1;
-        int youtube = -1;
-        long youtubeMs = -1;
+        // 0 = 本轮还没测出结果，-1 = 测了但失败，>0 = 成功
+        volatile long latency = 0;      // socks CONNECT 到 gstatic 的耗时
+        volatile int google = 0;        // HTTP 状态码
+        volatile long googleMs = 0;
+        volatile int youtube = 0;
+        volatile long youtubeMs = 0;
+        volatile boolean portReady = false;
+
+        boolean allDone() { return latency != 0 && google != 0 && youtube != 0; }
+        boolean allOk() {
+            return latency > 0
+                    && google > 0 && google < 400
+                    && youtube > 0 && youtube < 400;
+        }
     }
+
+    /** 固定实例，stopProbe 里一次 removeCallbacks 就能摘掉排队的下一轮 */
+    private final Runnable probeRound = new Runnable() {
+        @Override public void run() {
+            if (!probeRunning || !vpnRunning) return;
+            ProbeResult r = new ProbeResult();
+            curProbe = r;
+            new Thread(() -> runProbeRound(r), "probe").start();
+        }
+    };
 
     private void startProbe() {
         stopProbe();
         if (!vpnRunning) return;
         probeRunning = true;
-        probeTask = new Runnable() {
-            @Override public void run() {
-                if (!probeRunning || !vpnRunning) return;
-                new Thread(() -> {
-                    ProbeResult r = probeOnce();
-                    if (probeRunning) handler.post(() -> applyProbe(r));
-                }, "probe").start();
-                if (probeTask != null) handler.postDelayed(probeTask, PROBE_INTERVAL_MS);
-            }
-        };
-        handler.postDelayed(probeTask, 3000);   // 给 tun 与核心留出建立时间
+        probeFirstRound = true;
+        // 连上立刻给一行反馈：原来这里会空白 3 秒 + 三项串行请求，看着像没反应
+        if (tvProbe != null) {
+            tvProbe.setText("正在检测隧道连通性…");
+            tvProbe.setTextColor(0xFF94A3B8);
+            tvProbe.setVisibility(View.VISIBLE);
+        }
+        handler.post(probeRound);       // 不再死等 3 秒，首轮自己等核心就绪
     }
 
     private void stopProbe() {
         probeRunning = false;
-        if (probeTask != null) {
-            handler.removeCallbacks(probeTask);
-            probeTask = null;
-        }
+        curProbe = null;
+        handler.removeCallbacks(probeRound);
         if (tvProbe != null) {
             tvProbe.setVisibility(View.GONE);
             tvProbe.setText("");
@@ -260,50 +279,133 @@ public class MainActivity extends Activity {
         lastProbeLine = "";
     }
 
-    private ProbeResult probeOnce() {
-        ProbeResult r = new ProbeResult();
-        try {
-            long t0 = System.currentTimeMillis();
-            Socket s = socksConnect("www.gstatic.com", 443, 8000);
-            r.latency = System.currentTimeMillis() - t0;
-            s.close();
-        } catch (Exception e) {
-            log("[探测] 延迟失败: " + e.getMessage());
+    /** 一轮探测：先等核心 listen 10808（这本身就是隧道已建立的信号），再三项并行测 */
+    private void runProbeRound(final ProbeResult r) {
+        long t0 = System.currentTimeMillis();
+        boolean up = false;
+        while (System.currentTimeMillis() - t0 < SOCKS_WAIT_MS) {
+            if (!probeRunning || !vpnRunning) return;
+            Socket s = new Socket();
+            try {
+                s.connect(new InetSocketAddress("127.0.0.1", SOCKS_PORT), 250);
+                up = true;
+            } catch (Exception ignored) {
+            } finally {
+                try { s.close(); } catch (Exception ignored) {}
+            }
+            if (up) break;
+            try { Thread.sleep(80); } catch (InterruptedException ie) { return; }
         }
-        try {
-            long t0 = System.currentTimeMillis();
-            r.google = httpViaSocks("www.google.com", 443, "/generate_204", 9000);
-            r.googleMs = System.currentTimeMillis() - t0;
-        } catch (Exception e) {
-            log("[探测] Google 失败: " + e.getMessage());
+        if (!up) {
+            publish(r);                 // 端口没开：显示"核心未就绪"
+            scheduleNext(r);
+            return;
         }
-        try {
-            long t0 = System.currentTimeMillis();
-            r.youtube = httpViaSocks("www.youtube.com", 443, "/generate_204", 9000);
-            r.youtubeMs = System.currentTimeMillis() - t0;
-        } catch (Exception e) {
-            log("[探测] YouTube 失败: " + e.getMessage());
-        }
-        return r;
+        r.portReady = true;
+        publish(r);                     // 端口一通就先刷新，不等三项跑完
+
+        final CountDownLatch latch = new CountDownLatch(3);
+
+        new Thread(() -> {
+            try {
+                long s0 = System.currentTimeMillis();
+                Socket s = socksConnect("www.gstatic.com", 443, PROBE_TIMEOUT_MS);
+                r.latency = Math.max(1, System.currentTimeMillis() - s0);
+                try { s.close(); } catch (Exception ignored) {}
+            } catch (Exception e) {
+                r.latency = -1;
+                if (probeFirstRound) log("[探测] 延迟失败: " + e.getMessage());
+            } finally {
+                latch.countDown();
+                publish(r);
+            }
+        }, "probe-lat").start();
+
+        new Thread(() -> {
+            try {
+                long s0 = System.currentTimeMillis();
+                r.google = httpViaSocks("www.google.com", 443, "/generate_204", PROBE_TIMEOUT_MS);
+                r.googleMs = System.currentTimeMillis() - s0;
+            } catch (Exception e) {
+                r.google = -1;
+                if (probeFirstRound) log("[探测] Google 失败: " + e.getMessage());
+            } finally {
+                latch.countDown();
+                publish(r);
+            }
+        }, "probe-g").start();
+
+        new Thread(() -> {
+            try {
+                long s0 = System.currentTimeMillis();
+                r.youtube = httpViaSocks("www.youtube.com", 443, "/generate_204", PROBE_TIMEOUT_MS);
+                r.youtubeMs = System.currentTimeMillis() - s0;
+            } catch (Exception e) {
+                r.youtube = -1;
+                if (probeFirstRound) log("[探测] YouTube 失败: " + e.getMessage());
+            } finally {
+                latch.countDown();
+                publish(r);
+            }
+        }, "probe-yt").start();
+
+        try { latch.await(); } catch (InterruptedException ignored) {}
+        scheduleNext(r);
+    }
+
+    private void scheduleNext(ProbeResult r) {
+        probeFirstRound = false;
+        if (!probeRunning || !vpnRunning) return;
+        handler.postDelayed(probeRound, r.allOk() ? PROBE_INTERVAL_MS : PROBE_RETRY_MS);
+    }
+
+    /** 只有当前轮次的结果才允许上屏，避免旧线程把新连接的状态覆盖掉 */
+    private void publish(final ProbeResult r) {
+        if (!probeRunning || curProbe != r) return;
+        handler.post(() -> {
+            if (probeRunning && curProbe == r) applyProbe(r);
+        });
     }
 
     private void applyProbe(ProbeResult r) {
         if (tvProbe == null) return;
+        if (!r.portReady) {
+            tvProbe.setText("隧道未就绪：核心还在启动…");
+            tvProbe.setTextColor(0xFF94A3B8);
+            tvProbe.setVisibility(View.VISIBLE);
+            return;
+        }
+        String line = "延迟 " + fmtLat(r.latency)
+                + "  ·  Google " + fmtHttp(r.google, r.googleMs)
+                + "  ·  YouTube " + fmtHttp(r.youtube, r.youtubeMs);
         boolean gOk = r.google > 0 && r.google < 400;
         boolean yOk = r.youtube > 0 && r.youtube < 400;
-        String lat = r.latency >= 0 ? r.latency + "ms" : "—";
-        String g = gOk ? r.googleMs + "ms" : (r.google > 0 ? "HTTP " + r.google : "✗");
-        String y = yOk ? r.youtubeMs + "ms" : (r.youtube > 0 ? "HTTP " + r.youtube : "✗");
-        String line = "延迟 " + lat + "  ·  Google " + g + "  ·  YouTube " + y;
-        int color = (gOk && yOk) ? 0xFF10B981 : ((gOk || yOk) ? 0xFFF59E0B : 0xFFEF4444);
+        int color;
+        if (!r.allDone()) color = 0xFF94A3B8;                          // 还在测：灰
+        else if (r.latency > 0 && gOk && yOk) color = 0xFF10B981;      // 全通：绿
+        else if (gOk || yOk) color = 0xFFF59E0B;                       // 部分通：橙
+        else color = 0xFFEF4444;                                       // 全不通：红
         tvProbe.setText(line);
         tvProbe.setTextColor(color);
         tvProbe.setVisibility(View.VISIBLE);
-        // 30 秒一轮，只在结果变化时落日志，避免日志被同一行刷屏
-        if (!line.equals(lastProbeLine)) {
+        // 只在一轮全部测完时落日志，中间态不刷屏
+        if (r.allDone() && !line.equals(lastProbeLine)) {
             lastProbeLine = line;
             log("[探测] " + line);
         }
+    }
+
+    private static String fmtLat(long v) {
+        if (v == 0) return "测速中";
+        if (v < 0) return "✗";
+        return v + "ms";
+    }
+
+    private static String fmtHttp(int code, long ms) {
+        if (code == 0) return "测速中";
+        if (code < 0) return "✗";
+        if (code < 400) return ms + "ms";
+        return "HTTP " + code;
     }
 
     /** 经本地 socks5 建到 host:port 的 TCP 连接（不认证） */
@@ -400,7 +502,7 @@ public class MainActivity extends Activity {
 
                 });
                 log("[VPN] VpnService 已启动");
-                handler.post(MainActivity.this::startProbe);   // 3 秒后开始探测真实连通性
+                handler.post(MainActivity.this::startProbe);   // 连上立刻探测（内部自己等核心就绪）
             } catch (Exception e) {
                 log("[VPN] 异常: " + e.getMessage());
             }
