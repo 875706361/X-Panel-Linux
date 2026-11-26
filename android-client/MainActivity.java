@@ -28,6 +28,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -52,6 +54,13 @@ public class MainActivity extends Activity {
     // 只有「用户点登录」才允许查询成功后切到结果页；轮询和在途请求一律不许切页，
     // 否则任何一次后台查询回来都会把用户从当前页面弹走（日志页/换链接页都中过招）。
     private volatile boolean pendingLogin = false;
+    // 连接后的连通性探测：延迟 + Google + YouTube，经本地 socks 出站实测
+    private TextView tvProbe;
+    private volatile boolean probeRunning = false;
+    private Runnable probeTask;
+    private String lastProbeLine = "";
+    private static final int SOCKS_PORT = 10808;
+    private static final int PROBE_INTERVAL_MS = 30000;
     private Handler handler = new Handler(Looper.getMainLooper());
     private static final String SB_DIR = "/data/data/com.example.xpanel/files/sb";
     private static final String SB_CONF = SB_DIR + "/config.json";
@@ -68,6 +77,7 @@ public class MainActivity extends Activity {
                 log(msg);
                 if (msg.contains("核心进程退出") || msg.contains("已断开")) {
                     vpnRunning = false;
+                    stopProbe();
                     handler.post(() -> {
                         tvConnState.setText("○ 未连接 (点击开启)");
                         tvConnState.setTextColor(Color.parseColor("#94a3b8"));
@@ -113,6 +123,7 @@ public class MainActivity extends Activity {
         tvExpiry = findViewById(R.id.tvExpiry);
         tvStatus = findViewById(R.id.tvStatus);
         tvConnState = findViewById(R.id.tvConnState);
+        tvProbe = findViewById(R.id.tvProbe);
         btnPower = findViewById(R.id.btnPower);
         btnPower.setColorFilter(Color.parseColor("#64748b"));
         btnQuery = findViewById(R.id.btnQuery);
@@ -207,6 +218,142 @@ public class MainActivity extends Activity {
         Updater.checkAsync(this, PANEL_BASE);
     }
 
+    // ---- 连接后的真实连通性检测（延迟 / Google / YouTube）----
+    // XrayVpnService 里 addDisallowedApplication(getPackageName()) 把本 App 排除在 tun 外
+    // （防 IPC 回环），所以直接 new Socket() 访问 Google 走的是物理网卡，测不出隧道状态。
+    // 必须经 sing-box 在 127.0.0.1:10808 开的 socks inbound 出站，结果才代表隧道是否真的通。
+    private static class ProbeResult {
+        long latency = -1;      // socks CONNECT 到 gstatic 的耗时
+        int google = -1;        // HTTP 状态码，-1 表示没拿到响应
+        long googleMs = -1;
+        int youtube = -1;
+        long youtubeMs = -1;
+    }
+
+    private void startProbe() {
+        stopProbe();
+        if (!vpnRunning) return;
+        probeRunning = true;
+        probeTask = new Runnable() {
+            @Override public void run() {
+                if (!probeRunning || !vpnRunning) return;
+                new Thread(() -> {
+                    ProbeResult r = probeOnce();
+                    if (probeRunning) handler.post(() -> applyProbe(r));
+                }, "probe").start();
+                if (probeTask != null) handler.postDelayed(probeTask, PROBE_INTERVAL_MS);
+            }
+        };
+        handler.postDelayed(probeTask, 3000);   // 给 tun 与核心留出建立时间
+    }
+
+    private void stopProbe() {
+        probeRunning = false;
+        if (probeTask != null) {
+            handler.removeCallbacks(probeTask);
+            probeTask = null;
+        }
+        if (tvProbe != null) {
+            tvProbe.setVisibility(View.GONE);
+            tvProbe.setText("");
+        }
+        lastProbeLine = "";
+    }
+
+    private ProbeResult probeOnce() {
+        ProbeResult r = new ProbeResult();
+        try {
+            long t0 = System.currentTimeMillis();
+            Socket s = socksConnect("www.gstatic.com", 443, 8000);
+            r.latency = System.currentTimeMillis() - t0;
+            s.close();
+        } catch (Exception e) {
+            log("[探测] 延迟失败: " + e.getMessage());
+        }
+        try {
+            long t0 = System.currentTimeMillis();
+            r.google = httpViaSocks("www.google.com", 443, "/generate_204", 9000);
+            r.googleMs = System.currentTimeMillis() - t0;
+        } catch (Exception e) {
+            log("[探测] Google 失败: " + e.getMessage());
+        }
+        try {
+            long t0 = System.currentTimeMillis();
+            r.youtube = httpViaSocks("www.youtube.com", 443, "/generate_204", 9000);
+            r.youtubeMs = System.currentTimeMillis() - t0;
+        } catch (Exception e) {
+            log("[探测] YouTube 失败: " + e.getMessage());
+        }
+        return r;
+    }
+
+    private void applyProbe(ProbeResult r) {
+        if (tvProbe == null) return;
+        boolean gOk = r.google > 0 && r.google < 400;
+        boolean yOk = r.youtube > 0 && r.youtube < 400;
+        String lat = r.latency >= 0 ? r.latency + "ms" : "—";
+        String g = gOk ? r.googleMs + "ms" : (r.google > 0 ? "HTTP " + r.google : "✗");
+        String y = yOk ? r.youtubeMs + "ms" : (r.youtube > 0 ? "HTTP " + r.youtube : "✗");
+        String line = "延迟 " + lat + "  ·  Google " + g + "  ·  YouTube " + y;
+        int color = (gOk && yOk) ? 0xFF10B981 : ((gOk || yOk) ? 0xFFF59E0B : 0xFFEF4444);
+        tvProbe.setText(line);
+        tvProbe.setTextColor(color);
+        tvProbe.setVisibility(View.VISIBLE);
+        // 30 秒一轮，只在结果变化时落日志，避免日志被同一行刷屏
+        if (!line.equals(lastProbeLine)) {
+            lastProbeLine = line;
+            log("[探测] " + line);
+        }
+    }
+
+    /** 经本地 socks5 建到 host:port 的 TCP 连接（不认证） */
+    private Socket socksConnect(String host, int port, int timeoutMs) throws Exception {
+        Socket s = new Socket();
+        s.connect(new InetSocketAddress("127.0.0.1", SOCKS_PORT), timeoutMs);
+        s.setSoTimeout(timeoutMs);
+        java.io.DataOutputStream out = new java.io.DataOutputStream(s.getOutputStream());
+        java.io.DataInputStream in = new java.io.DataInputStream(s.getInputStream());
+        out.write(new byte[]{5, 1, 0}); out.flush();
+        byte[] hello = new byte[2];
+        in.readFully(hello);
+        if (hello[0] != 5 || hello[1] != 0) { s.close(); throw new Exception("socks 握手失败"); }
+        byte[] hb = host.getBytes("UTF-8");
+        out.writeByte(5); out.writeByte(1); out.writeByte(0);
+        out.writeByte(3); out.writeByte(hb.length); out.write(hb);
+        out.writeShort(port); out.flush();
+        byte[] rep = new byte[4];
+        in.readFully(rep);
+        if (rep[1] != 0) { s.close(); throw new Exception("socks 拒绝 code=" + rep[1]); }
+        if (rep[3] == 1) in.readFully(new byte[4]);
+        else if (rep[3] == 3) { int n = in.readUnsignedByte(); in.readFully(new byte[n]); }
+        else in.readFully(new byte[16]);
+        in.readFully(new byte[2]);
+        return s;
+    }
+
+    /** 经 socks 走 TLS 发一个 GET，返回 HTTP 状态码 */
+    private int httpViaSocks(String host, int port, String path, int timeoutMs) throws Exception {
+        Socket raw = socksConnect(host, port, timeoutMs);
+        // SSLSocketFactory.getDefault() 的静态返回类型是 SocketFactory，
+        // 只有转成 SSLSocketFactory 才有 createSocket(Socket, host, port, autoClose)
+        javax.net.ssl.SSLSocketFactory sf =
+                (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
+        javax.net.ssl.SSLSocket ssl = (javax.net.ssl.SSLSocket) sf.createSocket(raw, host, port, true);
+        ssl.setSoTimeout(timeoutMs);
+        ssl.startHandshake();
+        String req = "GET " + path + " HTTP/1.1\r\nHost: " + host
+                + "\r\nUser-Agent: XPanel-Android\r\nConnection: close\r\n\r\n";
+        ssl.getOutputStream().write(req.getBytes("UTF-8"));
+        ssl.getOutputStream().flush();
+        java.io.BufferedReader br = new java.io.BufferedReader(
+                new java.io.InputStreamReader(ssl.getInputStream(), "UTF-8"));
+        String status = br.readLine();
+        ssl.close();
+        if (status == null) throw new Exception("无响应");
+        String[] parts = status.split(" ");          // "HTTP/1.1 204 No Content"
+        return parts.length >= 2 ? Integer.parseInt(parts[1]) : -1;
+    }
+
     // ---- VpnService 建立 tun fd ----
     private void startVpn() {
         Intent intent = VpnService.prepare(this);
@@ -253,6 +400,7 @@ public class MainActivity extends Activity {
 
                 });
                 log("[VPN] VpnService 已启动");
+                handler.post(MainActivity.this::startProbe);   // 3 秒后开始探测真实连通性
             } catch (Exception e) {
                 log("[VPN] 异常: " + e.getMessage());
             }
@@ -704,6 +852,7 @@ public class MainActivity extends Activity {
         autoRefresh = false;
         handler.removeCallbacks(queryTask);
         vpnRunning = false;
+        stopProbe();
         handler.post(() -> {
             tvConnState.setText("○ 未连接 (点击开启)");
             tvConnState.setTextColor(Color.parseColor("#94a3b8"));

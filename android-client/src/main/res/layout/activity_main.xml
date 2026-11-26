@@ -284,6 +284,18 @@
             android:textColor="#94a3b8"
             android:textSize="13sp" />
 
+        <!-- 连接后的真实连通性：延迟 / Google / YouTube（走本地 socks 出站测） -->
+        <TextView
+            android:id="@+id/tvProbe"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text=""
+            android:textColor="#94a3b8"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
         <!-- 路由设置卡片 -->
         <LinearLayout
             android:layout_width="match_parent"

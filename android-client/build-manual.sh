@@ -46,9 +46,17 @@ $BT/aapt2 link -o "$OUT/unsigned.apk" -I "$PLATFORM/android.jar" \
   -A "$PROJECT/src/main/assets" "$OUT/res.zip"
 
 echo "=== 3. 编译 Java ==="
-javac -cp "$PLATFORM/android.jar" -d "$OUT/classes" \
+# 注意：这里绝不能写成 `javac ... | grep -v warning || true`——管道状态被吞掉，
+# 编译失败后 d8 会拿上一次残留的 .class 继续打包，产出一个"新版本号、旧代码"的 APK。
+rm -rf "$OUT/classes"; mkdir -p "$OUT/classes"
+if ! javac_out=$(javac -cp "$PLATFORM/android.jar" -d "$OUT/classes" \
   "$OUT/gen/com/example/xpanel/R.java" "$PROJECT/MainActivity.java" "$PROJECT/AppPickerActivity.java" \
-  "$PROJECT/XrayVpnService.java" "$PROJECT/Updater.java" 2>&1 | grep -v "warning:" || true
+  "$PROJECT/XrayVpnService.java" "$PROJECT/Updater.java" 2>&1); then
+  echo "$javac_out" | grep -v "warning:"
+  echo "❌ Java 编译失败，停止打包"
+  exit 1
+fi
+echo "$javac_out" | grep -v "warning:" || true
 
 echo "=== 4. DEX ==="
 $BT/d8 --lib "$PLATFORM/android.jar" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
