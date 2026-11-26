@@ -229,11 +229,15 @@ public class MainActivity extends Activity {
     // 必须经 sing-box 在 127.0.0.1:10808 开的 socks inbound 出站，结果才代表隧道是否真的通。
     private static class ProbeResult {
         // 0 = 本轮还没测出结果，-1 = 测了但失败，>0 = 成功
-        volatile long latency = 0;      // socks CONNECT 到 gstatic 的耗时
-        volatile int google = 0;        // HTTP 状态码
-        volatile long googleMs = 0;
+        // 连接耗时（socks CONNECT 完成）和首字节耗时（TLS+请求+响应头）分开记：
+        // 两者量纲完全不同，混在一起显示就会出现"延迟 45ms 但 Google 2000ms"的假象。
+        volatile long latency = 0;        // socks CONNECT 到 gstatic
+        volatile int google = 0;          // HTTP 状态码
+        volatile long googleConn = 0;     // TCP 连接耗时
+        volatile long googleTtfb = 0;     // 首字节耗时（不含连接）
         volatile int youtube = 0;
-        volatile long youtubeMs = 0;
+        volatile long youtubeConn = 0;
+        volatile long youtubeTtfb = 0;
         volatile boolean portReady = false;
 
         boolean allDone() { return latency != 0 && google != 0 && youtube != 0; }
@@ -323,9 +327,10 @@ public class MainActivity extends Activity {
 
         new Thread(() -> {
             try {
-                long s0 = System.currentTimeMillis();
-                r.google = httpViaSocks("www.google.com", 443, "/generate_204", PROBE_TIMEOUT_MS);
-                r.googleMs = System.currentTimeMillis() - s0;
+                long[] res = probeHttp("www.gstatic.com", "/generate_204", PROBE_TIMEOUT_MS);
+                r.google = (int) res[0];
+                r.googleConn = res[1];
+                r.googleTtfb = res[2];
             } catch (Exception e) {
                 r.google = -1;
                 if (probeFirstRound) log("[探测] Google 失败: " + e.getMessage());
@@ -337,9 +342,10 @@ public class MainActivity extends Activity {
 
         new Thread(() -> {
             try {
-                long s0 = System.currentTimeMillis();
-                r.youtube = httpViaSocks("www.youtube.com", 443, "/generate_204", PROBE_TIMEOUT_MS);
-                r.youtubeMs = System.currentTimeMillis() - s0;
+                long[] res = probeHttp("www.youtube.com", "/generate_204", PROBE_TIMEOUT_MS);
+                r.youtube = (int) res[0];
+                r.youtubeConn = res[1];
+                r.youtubeTtfb = res[2];
             } catch (Exception e) {
                 r.youtube = -1;
                 if (probeFirstRound) log("[探测] YouTube 失败: " + e.getMessage());
@@ -375,11 +381,17 @@ public class MainActivity extends Activity {
             tvProbe.setVisibility(View.VISIBLE);
             return;
         }
+        // 主行统一按"连接耗时"显示，跟左侧延迟同量纲。
+        // 原来把 TLS 握手 + 首字节的总耗时当成延迟，才会出现"延迟 45ms、Google 2100ms"的错位对比。
         String line = "延迟 " + fmtLat(r.latency)
-                + "  ·  Google " + fmtHttp(r.google, r.googleMs)
-                + "  ·  YouTube " + fmtHttp(r.youtube, r.youtubeMs);
+                + "  ·  Google " + fmtConn(r.google, r.googleConn)
+                + "  ·  YouTube " + fmtConn(r.youtube, r.youtubeConn);
         boolean gOk = r.google > 0 && r.google < 400;
         boolean yOk = r.youtube > 0 && r.youtube < 400;
+        // 只有首字节明显比连接慢时才补一行，平时不占地方
+        if (r.allDone() && Math.max(r.googleTtfb, r.youtubeTtfb) > 800) {
+            line += "\n首字节 Google " + r.googleTtfb + "ms · YouTube " + r.youtubeTtfb + "ms";
+        }
         int color;
         if (!r.allDone()) color = 0xFF94A3B8;                          // 还在测：灰
         else if (r.latency > 0 && gOk && yOk) color = 0xFF10B981;      // 全通：绿
@@ -391,7 +403,7 @@ public class MainActivity extends Activity {
         // 只在一轮全部测完时落日志，中间态不刷屏
         if (r.allDone() && !line.equals(lastProbeLine)) {
             lastProbeLine = line;
-            log("[探测] " + line);
+            log("[探测] " + line.replace("\n", " | "));
         }
     }
 
@@ -401,11 +413,11 @@ public class MainActivity extends Activity {
         return v + "ms";
     }
 
-    private static String fmtHttp(int code, long ms) {
+    /** 判通断的仍是 HTTP 状态码，但显示用连接耗时，避免把握手成本算进"延迟" */
+    private static String fmtConn(int code, long connMs) {
         if (code == 0) return "测速中";
         if (code < 0) return "✗";
-        if (code < 400) return ms + "ms";
-        return "HTTP " + code;
+        return connMs > 0 ? connMs + "ms" : "✓";
     }
 
     /** 经本地 socks5 建到 host:port 的 TCP 连接（不认证） */
@@ -433,27 +445,40 @@ public class MainActivity extends Activity {
         return s;
     }
 
-    /** 经 socks 走 TLS 发一个 GET，返回 HTTP 状态码 */
-    private int httpViaSocks(String host, int port, String path, int timeoutMs) throws Exception {
-        Socket raw = socksConnect(host, port, timeoutMs);
+    /** 经 socks 请求一个地址：返回 {状态码, 连接耗时ms, 首字节耗时ms} */
+    private long[] probeHttp(String host, String path, int timeoutMs) throws Exception {
+        long t0 = System.currentTimeMillis();
+        Socket raw = socksConnect(host, 443, timeoutMs);
+        long connMs = System.currentTimeMillis() - t0;
+        long t1 = System.currentTimeMillis();
+        int code = httpOver(raw, host, path, timeoutMs);
+        long ttfbMs = System.currentTimeMillis() - t1;
+        return new long[]{code, connMs, ttfbMs};
+    }
+
+    /** 在已建立的 TCP 上走 TLS 发一个 GET，返回 HTTP 状态码（连接由调用方负责，这里会关掉） */
+    private int httpOver(Socket raw, String host, String path, int timeoutMs) throws Exception {
         // SSLSocketFactory.getDefault() 的静态返回类型是 SocketFactory，
         // 只有转成 SSLSocketFactory 才有 createSocket(Socket, host, port, autoClose)
         javax.net.ssl.SSLSocketFactory sf =
                 (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
-        javax.net.ssl.SSLSocket ssl = (javax.net.ssl.SSLSocket) sf.createSocket(raw, host, port, true);
-        ssl.setSoTimeout(timeoutMs);
-        ssl.startHandshake();
-        String req = "GET " + path + " HTTP/1.1\r\nHost: " + host
-                + "\r\nUser-Agent: XPanel-Android\r\nConnection: close\r\n\r\n";
-        ssl.getOutputStream().write(req.getBytes("UTF-8"));
-        ssl.getOutputStream().flush();
-        java.io.BufferedReader br = new java.io.BufferedReader(
-                new java.io.InputStreamReader(ssl.getInputStream(), "UTF-8"));
-        String status = br.readLine();
-        ssl.close();
-        if (status == null) throw new Exception("无响应");
-        String[] parts = status.split(" ");          // "HTTP/1.1 204 No Content"
-        return parts.length >= 2 ? Integer.parseInt(parts[1]) : -1;
+        javax.net.ssl.SSLSocket ssl = (javax.net.ssl.SSLSocket) sf.createSocket(raw, host, 443, true);
+        try {
+            ssl.setSoTimeout(timeoutMs);
+            ssl.startHandshake();
+            String req = "GET " + path + " HTTP/1.1\r\nHost: " + host
+                    + "\r\nUser-Agent: XPanel-Android\r\nAccept: */*\r\nConnection: close\r\n\r\n";
+            ssl.getOutputStream().write(req.getBytes("UTF-8"));
+            ssl.getOutputStream().flush();
+            java.io.BufferedReader br = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(ssl.getInputStream(), "UTF-8"));
+            String status = br.readLine();
+            if (status == null) throw new Exception("无响应");
+            String[] parts = status.split(" ");          // "HTTP/1.1 204 No Content"
+            return parts.length >= 2 ? Integer.parseInt(parts[1]) : -1;
+        } finally {
+            try { ssl.close(); } catch (Exception ignored) {}
+        }
     }
 
     // ---- VpnService 建立 tun fd ----
